@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import os
 
 from database import init_db
-from routers import stock_selection, trading, backtest, analysis, models, ipo, data_sources, ai_priority
+from routers import stock_selection, trading, backtest, analysis, models, ipo, data_sources, ai_priority, account
 from config import settings
 
 
@@ -51,6 +51,7 @@ app.include_router(models.router)
 app.include_router(ipo.router)
 app.include_router(data_sources.router)
 app.include_router(ai_priority.router)
+app.include_router(account.router)
 
 
 @app.get("/api/health")
