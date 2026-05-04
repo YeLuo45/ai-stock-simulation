@@ -79,6 +79,19 @@ export interface EquityPoint {
   value: number;
 }
 
+export interface DrawdownPoint {
+  date: string;
+  drawdown: number;
+  peak: number;
+  equity: number;
+}
+
+export interface ReturnDistribution {
+  range: string;
+  count: number;
+  percentage: number;
+}
+
 export interface BacktestResponse {
   id: number;
   strategy_name: string;
@@ -87,8 +100,23 @@ export interface BacktestResponse {
   max_drawdown: number;
   sharpe_ratio: number;
   win_rate: number;
+  profit_loss_ratio: number;
   total_trades: number;
   equity_curve: EquityPoint[];
+  drawdown_curve: DrawdownPoint[];
+  return_distribution: ReturnDistribution[];
+  monthly_returns: { month: string; return_pct: number }[];
+  trades: BacktestTrade[];
+}
+
+export interface BacktestTrade {
+  date: string;
+  symbol: string;
+  type: "buy" | "sell";
+  price: number;
+  quantity: number;
+  amount: number;
+  profit?: number;
 }
 
 export interface TechnicalIndicators {

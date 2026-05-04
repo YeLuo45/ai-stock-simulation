@@ -9,6 +9,7 @@ import type {
   TechnicalAnalysis, AIModelConfig,
   IPOEvaluationResult, DataSourceResponse,
   AIModelPriorityResponse, StockInfo,
+  EquityPoint, DrawdownPoint, ReturnDistribution, BacktestTrade,
 } from "../types";
 
 // Default stocks with realistic data
@@ -232,27 +233,114 @@ export async function getMultipleQuotes(symbols: string[]): Promise<StockInfo[]>
 
 // ============== Backtest ==============
 
-export async function runBacktest(req: BacktestRequest): Promise<BacktestResponse> {
-  await new Promise(r => setTimeout(r, 1000));
-  const days = Math.ceil((new Date(req.end_date).getTime() - new Date(req.start_date).getTime()) / (1000 * 60 * 60 * 24));
-  const equity = Array.from({ length: Math.min(days, 30) }, (_, idx) => ({
-    date: new Date(new Date(req.start_date).getTime() + idx * 86400000).toISOString().split("T")[0],
-    value: req.initial_cash * (1 + (Math.random() - 0.4) * 0.02 * (idx + 1)),
-  }));
+export interface BacktestIndicator {
+  type: "MA" | "RSI" | "MACD" | "KDJ" | "BOLL" | "VOL" | "PRICE";
+  enabled: boolean;
+  params: Record<string, number>;
+}
 
-  const finalValue = equity[equity.length - 1].value;
+export interface BacktestStrategy {
+  name: string;
+  indicators: BacktestIndicator[];
+  buyCondition: string;
+  sellCondition: string;
+}
+
+export async function runBacktest(req: BacktestRequest): Promise<BacktestResponse> {
+  await new Promise(r => setTimeout(r, 1200));
+  const days = Math.ceil((new Date(req.end_date).getTime() - new Date(req.start_date).getTime()) / (1000 * 60 * 60 * 24));
+  const numPoints = Math.min(days, 30);
+  
+  // Generate equity curve with more realistic simulation
+  let equity = req.initial_cash;
+  const equityCurve: EquityPoint[] = [];
+  const drawdownCurve: DrawdownPoint[] = [];
+  let peak = req.initial_cash;
+  let maxDrawdown = 0;
+  
+  const startTime = new Date(req.start_date).getTime();
+  for (let idx = 0; idx < numPoints; idx++) {
+    const date = new Date(startTime + idx * 86400000).toISOString().split("T")[0];
+    // More realistic random walk with upward bias
+    const dailyReturn = (Math.random() - 0.45) * 0.03;
+    equity = equity * (1 + dailyReturn);
+    equityCurve.push({ date, value: Math.round(equity) });
+    
+    // Track peak and drawdown
+    if (equity > peak) peak = equity;
+    const drawdown = ((peak - equity) / peak) * 100;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+    drawdownCurve.push({ date, drawdown: Math.round(drawdown * 100) / 100, peak: Math.round(peak), equity: Math.round(equity) });
+  }
+
+  // Generate trades
+  const trades: BacktestTrade[] = [];
+  const numTrades = Math.floor(Math.random() * 30) + 15;
+  for (let i = 0; i < numTrades; i++) {
+    const tradeDate = equityCurve[Math.floor(Math.random() * (equityCurve.length - 1))].date;
+    const type = Math.random() > 0.5 ? "buy" : "sell";
+    trades.push({
+      date: tradeDate,
+      symbol: DEFAULT_STOCKS[Math.floor(Math.random() * DEFAULT_STOCKS.length)].symbol,
+      type,
+      price: 10 + Math.random() * 100,
+      quantity: Math.floor(Math.random() * 1000) * 100,
+      amount: 0,
+      profit: type === "sell" ? (Math.random() - 0.4) * 5000 : undefined,
+    });
+    trades[trades.length - 1].amount = trades[trades.length - 1].price * trades[trades.length - 1].quantity;
+  }
+  trades.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Generate monthly returns
+  const monthlyReturns: { month: string; return_pct: number }[] = [];
+  const numMonths = Math.min(Math.ceil(days / 30), 12);
+  for (let m = 0; m < numMonths; m++) {
+    const monthDate = new Date(new Date(req.start_date).getTime() + m * 30 * 86400000);
+    monthlyReturns.push({
+      month: `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`,
+      return_pct: Math.round((Math.random() - 0.4) * 15 * 100) / 100,
+    });
+  }
+
+  // Generate return distribution
+  const returnDistribution: ReturnDistribution[] = [
+    { range: "<-5%", count: Math.floor(Math.random() * 5), percentage: 0 },
+    { range: "-5%~0%", count: Math.floor(Math.random() * 10), percentage: 0 },
+    { range: "0%~5%", count: Math.floor(Math.random() * 15), percentage: 0 },
+    { range: "5%~10%", count: Math.floor(Math.random() * 10), percentage: 0 },
+    { range: ">10%", count: Math.floor(Math.random() * 5), percentage: 0 },
+  ];
+  const total = returnDistribution.reduce((sum, r) => sum + r.count, 0);
+  returnDistribution.forEach(r => r.percentage = total > 0 ? Math.round((r.count / total) * 100 * 10) / 10 : 0);
+
+  const finalValue = equityCurve[equityCurve.length - 1].value;
   const totalReturn = ((finalValue - req.initial_cash) / req.initial_cash) * 100;
+  
+  // Calculate win rate and profit/loss ratio from trades
+  const closedTrades = trades.filter(t => t.profit !== undefined);
+  const winningTrades = closedTrades.filter(t => (t.profit || 0) > 0);
+  const losingTrades = closedTrades.filter(t => (t.profit || 0) < 0);
+  const avgWin = winningTrades.length > 0 ? winningTrades.reduce((s, t) => s + (t.profit || 0), 0) / winningTrades.length : 0;
+  const avgLoss = losingTrades.length > 0 ? Math.abs(losingTrades.reduce((s, t) => s + (t.profit || 0), 0) / losingTrades.length) : 1;
+  const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length) * 100 : 50;
+  const profitLossRatio = avgLoss > 0 ? avgWin / avgLoss : 1;
 
   const backtestResult: BacktestResponse = {
     id: Date.now(),
     strategy_name: req.strategy_name,
-    total_return: totalReturn,
-    annual_return: totalReturn * 365 / days,
-    max_drawdown: Math.random() * 15,
-    sharpe_ratio: Math.random() * 2 + 0.5,
-    win_rate: Math.random() * 40 + 40,
-    total_trades: Math.floor(Math.random() * 50) + 20,
-    equity_curve: equity,
+    total_return: Math.round(totalReturn * 100) / 100,
+    annual_return: Math.round((totalReturn * 365 / days) * 100) / 100,
+    max_drawdown: Math.round(maxDrawdown * 100) / 100,
+    sharpe_ratio: Math.round((Math.random() * 2 + 0.5) * 100) / 100,
+    win_rate: Math.round(winRate * 10) / 10,
+    profit_loss_ratio: Math.round(profitLossRatio * 100) / 100,
+    total_trades: trades.length,
+    equity_curve: equityCurve,
+    drawdown_curve: drawdownCurve,
+    return_distribution: returnDistribution,
+    monthly_returns: monthlyReturns,
+    trades,
   };
 
   const results = getStorage<BacktestResponse[]>("backtest_results", []);
