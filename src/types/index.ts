@@ -124,10 +124,11 @@ export type APIProtocol = "openai_compatible" | "anthropic" | "google";
 
 export interface AIModelConfig {
   model_name: string;
+  api_key?: string;
   base_url?: string;
   api_protocol?: APIProtocol;
   is_active: boolean;
-  has_api_key: boolean;
+  has_api_key?: boolean;
 }
 
 export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo";

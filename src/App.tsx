@@ -12,24 +12,20 @@ import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
 function App() {
-  const { currentPage, setPortfolio, setLoading, showNotification } = useStore()
+  const { currentPage, setPortfolio, setLoading } = useStore()
 
   useEffect(() => {
-    // Fetch initial portfolio data
-    const fetchPortfolio = async () => {
-      setLoading(true)
-      try {
-        const data = await getPortfolio()
-        setPortfolio(data)
-      } catch (err) {
-        console.error('Failed to fetch portfolio:', err)
-        showNotification('info', '请确保后端服务已启动 (python main.py)')
-      } finally {
-        setLoading(false)
-      }
+    // Fetch initial portfolio data (sync in demo mode)
+    setLoading(true)
+    try {
+      const data = getPortfolio()
+      setPortfolio(data)
+    } catch (err) {
+      console.error('Failed to fetch portfolio:', err)
+    } finally {
+      setLoading(false)
     }
-    fetchPortfolio()
-  }, [setPortfolio, setLoading, showNotification])
+  }, [setPortfolio, setLoading])
 
   const renderPage = () => {
     switch (currentPage) {
