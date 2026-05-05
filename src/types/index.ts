@@ -61,6 +61,7 @@ export interface Trade {
   price: number;
   quantity: number;
   commission: number;
+  stamp_tax?: number; // Only applicable for sell trades
   total_cost: number;
   timestamp: string;
 }

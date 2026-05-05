@@ -15,16 +15,12 @@ function App() {
   const { currentPage, setPortfolio, setLoading } = useStore()
 
   useEffect(() => {
-    // Fetch initial portfolio data (sync in demo mode)
+    // Fetch initial portfolio data
     setLoading(true)
-    try {
-      const data = getPortfolio()
-      setPortfolio(data)
-    } catch (err) {
-      console.error('Failed to fetch portfolio:', err)
-    } finally {
-      setLoading(false)
-    }
+    getPortfolio()
+      .then((data) => setPortfolio(data))
+      .catch((err) => console.error('Failed to fetch portfolio:', err))
+      .finally(() => setLoading(false))
   }, [setPortfolio, setLoading])
 
   const renderPage = () => {
