@@ -304,27 +304,27 @@ export function gridSearchOptimization(
   optimizationParams: Record<string, [number, number, number]>
 ): OptimizationResult[] {
   const results: OptimizationResult[] = [];
-  
+
   // 解析优化参数
   const shortMAPeriods = generateRange(
     optimizationParams['MA.short']?.[0] || 5,
     optimizationParams['MA.short']?.[1] || 20,
     optimizationParams['MA.short']?.[2] || 5
   );
-  
+
   const longMAPeriods = generateRange(
     optimizationParams['MA.long']?.[0] || 20,
     optimizationParams['MA.long']?.[1] || 60,
     optimizationParams['MA.long']?.[2] || 10
   );
-  
+
   // 网格搜索
   for (const shortPeriod of shortMAPeriods) {
     for (const longPeriod of longMAPeriods) {
       if (shortPeriod >= longPeriod) continue; // 短周期必须小于长周期
-      
+
       const { result } = runSingleBacktest(symbol, startDate, endDate, initialCash, shortPeriod, longPeriod);
-      
+
       results.push({
         params: { 'MA.short': shortPeriod, 'MA.long': longPeriod },
         total_return: result.total_return,
@@ -335,11 +335,57 @@ export function gridSearchOptimization(
       });
     }
   }
-  
+
   // 按总收益排序
   results.sort((a, b) => b.total_return - a.total_return);
-  
+
   return results;
+}
+
+/**
+ * 多策略对比回测
+ */
+export function runMultiStrategyBacktest(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  initialCash: number,
+  strategies: Array<{ id: string; name: string; shortPeriod: number; longPeriod: number; color: string }>
+): {
+  results: import('../types').MultiStrategyResult[];
+  klineData: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
+} {
+  const results: import('../types').MultiStrategyResult[] = [];
+  let klineData: { time: string; open: number; high: number; low: number; close: number; volume: number }[] = [];
+
+  for (const strategy of strategies) {
+    const { result, klineData: kd } = runSingleBacktest(
+      symbol, startDate, endDate, initialCash, strategy.shortPeriod, strategy.longPeriod
+    );
+
+    if (klineData.length === 0) {
+      klineData = kd;
+    }
+
+    results.push({
+      strategy_id: strategy.id,
+      strategy_name: strategy.name,
+      color: strategy.color,
+      total_return: result.total_return,
+      annual_return: result.annual_return,
+      max_drawdown: result.max_drawdown,
+      sharpe_ratio: result.sharpe_ratio,
+      win_rate: result.win_rate,
+      profit_loss_ratio: result.profit_loss_ratio,
+      total_trades: result.total_trades,
+      equity_curve: result.equity_curve,
+    });
+  }
+
+  // 按总收益排序
+  results.sort((a, b) => b.total_return - a.total_return);
+
+  return { results, klineData };
 }
 
 /**

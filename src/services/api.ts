@@ -45,6 +45,7 @@ import {
 import {
   runSingleBacktest,
   gridSearchOptimization,
+  runMultiStrategyBacktest as doMultiStrategyBacktest,
 } from "./backtestEngine";
 
 // Re-export constants for fee calculation
@@ -471,4 +472,52 @@ export function updateDataSource(_sourceId: string, _enabled: boolean): DataSour
   // This would update the data source settings in IndexedDB
   // For now, just return the current state
   return getDataSources();
+}
+
+// ============== Multi-Strategy Comparison API ==============
+
+export interface MultiStrategyRequest {
+  symbol: string;
+  startDate: string;
+  endDate: string;
+  initialCash: number;
+  strategies: Array<{
+    id: string;
+    name: string;
+    shortPeriod: number;
+    longPeriod: number;
+    color: string;
+  }>;
+}
+
+export interface MultiStrategyComparisonResponse {
+  strategies: Array<{
+    strategy_id: string;
+    strategy_name: string;
+    color: string;
+    total_return: number;
+    annual_return: number;
+    max_drawdown: number;
+    sharpe_ratio: number;
+    win_rate: number;
+    profit_loss_ratio: number;
+    total_trades: number;
+    equity_curve: Array<{ date: string; value: number }>;
+  }>;
+  kline_data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
+}
+
+export async function runMultiStrategyComparison(req: MultiStrategyRequest): Promise<MultiStrategyComparisonResponse> {
+  const { results, klineData } = doMultiStrategyBacktest(
+    req.symbol,
+    req.startDate,
+    req.endDate,
+    req.initialCash,
+    req.strategies
+  );
+
+  return {
+    strategies: results,
+    kline_data: klineData,
+  };
 }

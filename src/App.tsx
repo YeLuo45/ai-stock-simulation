@@ -8,6 +8,7 @@ import TradingPage from './pages/TradingPage'
 import AnalysisPage from './pages/AnalysisPage'
 import SettingsPage from './pages/SettingsPage'
 import IPOEvaluationPage from './pages/IPOEvaluationPage'
+import StrategyComparisonPage from './pages/StrategyComparisonPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -39,6 +40,8 @@ function App() {
         return <SettingsPage />
       case 'ipo':
         return <IPOEvaluationPage />
+      case 'strategy':
+        return <StrategyComparisonPage />
       default:
         return <HomePage />
     }

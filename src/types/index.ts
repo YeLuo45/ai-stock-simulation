@@ -161,7 +161,7 @@ export interface AIModelConfig {
   has_api_key?: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "strategy";
 
 // ============== IPO Evaluation ==============
 
@@ -187,6 +187,36 @@ export interface TechnicalData {
   ma20?: number;
   current_price?: number;
   change_pct?: number;
+}
+
+export interface StrategyCard {
+  id: string;
+  strategy_id?: string; // assigned after backtest run
+  name: string;
+  shortPeriod: number;
+  longPeriod: number;
+  color: string;
+  enabled: boolean;
+}
+
+export interface MultiStrategyResult {
+  strategy_id: string;
+  strategy_name: string;
+  color: string;
+  total_return: number;
+  annual_return: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
+  win_rate: number;
+  profit_loss_ratio: number;
+  total_trades: number;
+  equity_curve: EquityPoint[];
+}
+
+export interface MultiStrategyComparisonResponse {
+  strategies: MultiStrategyResult[];
+  kline_data: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
+  comparison_date?: string;
 }
 
 export type Recommendation = "强烈推荐" | "推荐" | "中性" | "回避" | "强烈回避";
