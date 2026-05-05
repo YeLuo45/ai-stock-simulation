@@ -10,6 +10,7 @@ import type {
   TechnicalAnalysis, AIModelConfig,
   IPOEvaluationResult, DataSourceResponse,
   AIModelPriorityResponse, APIProtocol,
+  BatchBacktestResponse,
 } from "../types";
 import {
   getPortfolio as s_getPortfolio,
@@ -279,6 +280,57 @@ export const getBacktestResults = async (limit = 20) => {
   }
   await delay(300);
   return s_getBacktestResults().slice(0, limit);
+};
+
+export interface RunBatchBacktestOptions {
+  symbols: string[];
+  start_date?: string;
+  end_date?: string;
+  initial_cash?: number;
+  onProgress?: (progress: number) => void;
+}
+
+export const runBatchBacktest = async (opts: RunBatchBacktestOptions): Promise<BatchBacktestResponse> => {
+  const { symbols, start_date = "2023-01-01", end_date = "2026-04-01", initial_cash = 1_000_000, onProgress } = opts;
+
+  if (!isDemoMode) {
+    const res = await fetch(`/api/backtest/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols, start_date, end_date, initial_cash }),
+    });
+    return res.json();
+  }
+
+  // Demo mode: simulate progress
+  const results: BatchBacktestResponse = {
+    results: [],
+    failed: [],
+    progress: 0,
+  };
+
+  for (let i = 0; i < symbols.length; i++) {
+    await delay(300);
+    const sym = symbols[i];
+    const stock = findStock(sym);
+    const basePrice = stock.price;
+    const history = generatePriceHistory(basePrice, 252);
+    const result = meanReversionBacktest(history, initial_cash, {});
+
+    results.results.push({
+      symbol: sym,
+      name: stock.name,
+      total_return: result.total_return,
+      sharpe_ratio: result.sharpe_ratio,
+      max_drawdown: result.max_drawdown,
+      win_rate: (result.win_rate || 0) * 100,
+      trade_count: result.total_trades,
+    });
+    results.progress = (i + 1) / symbols.length;
+    onProgress?.(results.progress);
+  }
+
+  return results;
 };
 
 export const explainBacktest = async (strategyName: string, results: object) => {

@@ -91,6 +91,22 @@ export interface BacktestResponse {
   equity_curve: EquityPoint[];
 }
 
+export interface BatchBacktestResult {
+  symbol: string;
+  name: string;
+  total_return: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  trade_count: number;
+}
+
+export interface BatchBacktestResponse {
+  results: BatchBacktestResult[];
+  failed: string[];
+  progress: number;
+}
+
 export interface TechnicalIndicators {
   MA5?: number;
   MA10?: number;

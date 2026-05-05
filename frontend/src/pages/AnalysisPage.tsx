@@ -1,14 +1,18 @@
 /**
  * Technical Analysis Page - AI-powered chart analysis with multi-panel K-line chart
+ * Now also supports batch backtesting with comparison table
  */
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useStore } from "../store";
-import { technicalAnalysis, getIndicators, searchStocks } from "../services/api";
+import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest } from "../services/api";
 import { generatePriceHistory } from "../services/indicators";
 import type { OHLCV } from "../services/indicators";
-import type { TechnicalAnalysis, StockInfo, StockPool } from "../types";
+import type { TechnicalAnalysis, StockInfo, StockPool, BatchBacktestResult } from "../types";
 import KLineChart from "../components/KLineChart";
-import { Layers, ChevronDown, Check } from "lucide-react";
+import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play } from "lucide-react";
+
+type SortField = "totalReturn" | "sharpeRatio" | "maxDrawdown" | "winRate" | "tradeCount";
+type SortDir = "asc" | "desc";
 
 export default function AnalysisPage() {
   const { showNotification, stockPools, activePoolId, setActivePoolId } = useStore();
@@ -21,6 +25,16 @@ export default function AnalysisPage() {
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [poolDropdownOpen, setPoolDropdownOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"search" | "pool">("search");
+
+  // Batch backtest state
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchResults, setBatchResults] = useState<BatchBacktestResult[]>([]);
+  const [sortField, setSortField] = useState<SortField>("totalReturn");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const cancelRef = useRef(false);
 
   const handleSymbolSearch = async (kw: string) => {
     setSymbol(kw);
@@ -38,7 +52,6 @@ export default function AnalysisPage() {
     setAnalysis(null);
     setIndicators({});
     setSearchMode("search");
-    // Generate chart data for the selected stock
     const history = generatePriceHistory(s.price, 120);
     setChartData(history);
   };
@@ -61,7 +74,6 @@ export default function AnalysisPage() {
       ]);
       setAnalysis(a);
       setIndicators(ind.indicators || {});
-      // Ensure chart data is loaded
       if (chartData.length === 0) {
         const stock = { symbol, name, price: a.current_price };
         const history = generatePriceHistory(stock.price, 120);
@@ -75,6 +87,95 @@ export default function AnalysisPage() {
       setLoading(false);
     }
   };
+
+  // ---- Batch backtest ----
+  const importFromPool = useCallback(() => {
+    if (!activePool) return;
+    const syms = activePool.stocks.map(s => s.symbol);
+    setSelectedSymbols(syms);
+    showNotification("info", `已导入 ${syms.length} 只股票到回测列表`);
+  }, [activePool, showNotification]);
+
+  const toggleSymbol = (sym: string) => {
+    setSelectedSymbols(prev =>
+      prev.includes(sym) ? prev.filter(s => s !== sym) : [...prev, sym]
+    );
+  };
+
+  const runBatchBacktestHandler = async () => {
+    if (selectedSymbols.length === 0) {
+      showNotification("error", "请先选择至少一个标的");
+      return;
+    }
+    setBatchRunning(true);
+    setBatchProgress(0);
+    setBatchResults([]);
+    setSortField("totalReturn");
+    setSortDir("desc");
+    cancelRef.current = false;
+
+    try {
+      const result = await runBatchBacktest({
+        symbols: selectedSymbols,
+        start_date: "2023-01-01",
+        end_date: "2026-04-01",
+        initial_cash: 1_000_000,
+        onProgress: (p) => {
+          setBatchProgress(p);
+        },
+      });
+
+      if (cancelRef.current) {
+        showNotification("info", "批量回测已取消");
+      } else {
+        setBatchResults(result.results);
+        setBatchProgress(1);
+        showNotification("success", `批量回测完成，成功 ${result.results.length} 个，失败 ${result.failed.length} 个`);
+      }
+    } catch (e: unknown) {
+      showNotification("error", "批量回测失败");
+      console.error(e);
+    } finally {
+      setBatchRunning(false);
+    }
+  };
+
+  const cancelBatch = () => {
+    cancelRef.current = true;
+    setBatchRunning(false);
+  };
+
+  const sortedResults = [...batchResults].sort((a, b) => {
+    const valA = a[sortField === "totalReturn" ? "total_return" :
+      sortField === "maxDrawdown" ? "max_drawdown" :
+        sortField === "sharpeRatio" ? "sharpe_ratio" :
+          sortField === "winRate" ? "win_rate" : "trade_count"];
+    const valB = b[sortField === "totalReturn" ? "total_return" :
+      sortField === "maxDrawdown" ? "max_drawdown" :
+        sortField === "sharpeRatio" ? "sharpe_ratio" :
+          sortField === "winRate" ? "win_rate" : "trade_count"];
+    const mult = sortDir === "asc" ? 1 : -1;
+    return (valA - valB) * mult;
+  });
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("desc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => (
+    <ArrowUpDown
+      size={12}
+      className={`inline ml-1 ${sortField === field ? "text-accent-primary" : "text-text-muted"}`}
+    />
+  );
+
+  // ---- Pool symbol selector for batch mode ----
+  const poolSymbols = activePool?.stocks.map(s => s.symbol) || [];
 
   const indicatorGroups = [
     { label: "均线", items: [
@@ -107,98 +208,343 @@ export default function AnalysisPage() {
         <h2 className="text-xl font-bold text-text-primary mb-1">📈 AI 技术分析</h2>
         <p className="text-text-muted text-sm mb-4">输入股票代码，AI 将解读 K 线和技术指标并给出压力位/支撑位</p>
 
-        {/* Search */}
-        <div className="flex gap-3">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={symbol}
-              onChange={(e) => handleSymbolSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && runAnalysis()}
-              placeholder={searchMode === "pool" && activePool ? `已选择股票池: ${activePool.name}，输入代码搜索` : "输入股票代码或名称"}
-              className="w-full px-4 py-3 bg-bg-tertiary border border-border-color rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
-            />
-            {searchResults.length > 0 && (
-              <div className="absolute top-full mt-1 w-full bg-bg-secondary border border-border-color rounded-lg shadow-xl z-10 max-h-48 overflow-y-auto">
-                {searchResults.map((s) => (
-                  <button
-                    key={s.symbol}
-                    onClick={() => selectStock(s)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-bg-tertiary border-b border-border-color/30 last:border-0 transition-colors"
-                  >
-                    <span className="font-medium text-accent-primary">{s.symbol}</span>
-                    <span className="ml-2 text-text-primary">{s.name}</span>
-                    <span className="float-right text-text-muted text-xs">¥{s.price.toFixed(2)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Mode toggle */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={() => setBatchMode(false)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              !batchMode
+                ? "bg-accent-primary text-bg-primary"
+                : "bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            单标的分析
+          </button>
+          <button
+            onClick={() => setBatchMode(true)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              batchMode
+                ? "bg-accent-primary text-bg-primary"
+                : "bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            批量回测
+          </button>
+        </div>
 
-          {/* Stock Pool Selector */}
-          {stockPools.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={() => setPoolDropdownOpen(!poolDropdownOpen)}
-                className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all border ${
-                  activePool
-                    ? "bg-accent-secondary/10 border-accent-secondary text-accent-secondary"
-                    : "bg-bg-tertiary border-border-color text-text-secondary hover:text-text-primary hover:border-accent-primary/50"
-                }`}
-              >
-                <Layers size={18} />
-                <span className="hidden sm:inline">
-                  {activePool ? activePool.name : "选择股票池"}
-                </span>
-                <ChevronDown size={14} className={`transition-transform ${poolDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {poolDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border-color rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                  <div className="p-2 border-b border-border-color">
-                    <p className="text-xs text-text-muted px-2">选择股票池以批量分析</p>
-                  </div>
-                  <button
-                    onClick={() => { setActivePoolId(null); setPoolDropdownOpen(false); setSearchMode("search"); }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-bg-tertiary transition-colors flex items-center justify-between ${
-                      !activePool ? "text-accent-primary" : "text-text-secondary"
-                    }`}
-                  >
-                    <span>不使用股票池</span>
-                    {!activePool && <Check size={14} />}
-                  </button>
-                  {stockPools.map((pool) => (
+        {/* Single stock search */}
+        {!batchMode && (
+          <div className="flex gap-3">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={symbol}
+                onChange={(e) => handleSymbolSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runAnalysis()}
+                placeholder={searchMode === "pool" && activePool ? `已选择股票池: ${activePool.name}，输入代码搜索` : "输入股票代码或名称"}
+                className="w-full px-4 py-3 bg-bg-tertiary border border-border-color rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
+              />
+              {searchResults.length > 0 && (
+                <div className="absolute top-full mt-1 w-full bg-bg-secondary border border-border-color rounded-lg shadow-xl z-10 max-h-48 overflow-y-auto">
+                  {searchResults.map((s) => (
                     <button
-                      key={pool.id}
-                      onClick={() => selectFromPool(pool)}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-bg-tertiary transition-colors flex items-center justify-between ${
-                        activePool?.id === pool.id ? "text-accent-primary" : "text-text-secondary"
-                      }`}
+                      key={s.symbol}
+                      onClick={() => selectStock(s)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-bg-tertiary border-b border-border-color/30 last:border-0 transition-colors"
                     >
-                      <div>
-                        <span className="font-medium">{pool.name}</span>
-                        <span className="ml-2 text-xs text-text-muted">({pool.stocks.length}只)</span>
-                      </div>
-                      {activePool?.id === pool.id && <Check size={14} />}
+                      <span className="font-medium text-accent-primary">{s.symbol}</span>
+                      <span className="ml-2 text-text-primary">{s.name}</span>
+                      <span className="float-right text-text-muted text-xs">¥{s.price.toFixed(2)}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
-          )}
 
-          <button
-            onClick={runAnalysis}
-            disabled={loading || !symbol}
-            className="bg-accent-primary text-bg-primary px-6 py-3 rounded-lg font-medium hover:bg-accent-primary/90 disabled:opacity-50 text-sm transition-all shadow-[0_0_15px_rgba(0,212,255,0.3)]"
-          >
-            {loading ? "分析中..." : "开始分析"}
-          </button>
-        </div>
+            {/* Stock Pool Selector */}
+            {stockPools.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setPoolDropdownOpen(!poolDropdownOpen)}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all border ${
+                    activePool
+                      ? "bg-accent-secondary/10 border-accent-secondary text-accent-secondary"
+                      : "bg-bg-tertiary border-border-color text-text-secondary hover:text-text-primary hover:border-accent-primary/50"
+                  }`}
+                >
+                  <Layers size={18} />
+                  <span className="hidden sm:inline">
+                    {activePool ? activePool.name : "选择股票池"}
+                  </span>
+                  <ChevronDown size={14} className={`transition-transform ${poolDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {poolDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border-color rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                    <div className="p-2 border-b border-border-color">
+                      <p className="text-xs text-text-muted px-2">选择股票池以批量分析</p>
+                    </div>
+                    <button
+                      onClick={() => { setActivePoolId(null); setPoolDropdownOpen(false); setSearchMode("search"); }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-bg-tertiary transition-colors flex items-center justify-between ${
+                        !activePool ? "text-accent-primary" : "text-text-secondary"
+                      }`}
+                    >
+                      <span>不使用股票池</span>
+                      {!activePool && <Check size={14} />}
+                    </button>
+                    {stockPools.map((pool) => (
+                      <button
+                        key={pool.id}
+                        onClick={() => selectFromPool(pool)}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-bg-tertiary transition-colors flex items-center justify-between ${
+                          activePool?.id === pool.id ? "text-accent-primary" : "text-text-secondary"
+                        }`}
+                      >
+                        <div>
+                          <span className="font-medium">{pool.name}</span>
+                          <span className="ml-2 text-xs text-text-muted">({pool.stocks.length}只)</span>
+                        </div>
+                        {activePool?.id === pool.id && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={runAnalysis}
+              disabled={loading || !symbol}
+              className="bg-accent-primary text-bg-primary px-6 py-3 rounded-lg font-medium hover:bg-accent-primary/90 disabled:opacity-50 text-sm transition-all shadow-[0_0_15px_rgba(0,212,255,0.3)]"
+            >
+              {loading ? "分析中..." : "开始分析"}
+            </button>
+          </div>
+        )}
+
+        {/* Batch mode UI */}
+        {batchMode && (
+          <div className="space-y-4">
+            {/* Pool import bar */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                {stockPools.length > 0 && (
+                  <div className="flex gap-2">
+                    <select
+                      className="flex-1 bg-bg-tertiary border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary"
+                      value={activePoolId || ""}
+                      onChange={e => {
+                        const pool = stockPools.find(p => p.id === e.target.value);
+                        if (pool) selectFromPool(pool);
+                      }}
+                    >
+                      <option value="">选择股票池导入</option>
+                      {stockPools.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.stocks.length}只)</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={importFromPool}
+                      disabled={!activePool}
+                      className="px-4 py-2 bg-accent-secondary/10 border border-accent-secondary text-accent-secondary rounded-lg text-sm font-medium hover:bg-accent-secondary/20 disabled:opacity-40 transition-all"
+                    >
+                      一键导入全部
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected symbols chips */}
+            {selectedSymbols.length > 0 && (
+              <div className="bg-bg-tertiary rounded-lg p-3 border border-border-color">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-text-muted">
+                    已选择 <span className="text-accent-primary font-medium">{selectedSymbols.length}</span> 个标的
+                  </span>
+                  <button
+                    onClick={() => setSelectedSymbols([])}
+                    className="text-xs text-text-muted hover:text-accent-danger transition-colors"
+                  >
+                    清空
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                  {selectedSymbols.map(sym => (
+                    <span
+                      key={sym}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-bg-secondary border border-border-color rounded text-xs text-text-primary"
+                    >
+                      {sym}
+                      <button
+                        onClick={() => toggleSymbol(sym)}
+                        className="text-text-muted hover:text-accent-danger"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pool quick select */}
+            {activePool && (
+              <div className="bg-bg-tertiary rounded-lg p-3 border border-border-color">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-text-muted">{activePool.name}</span>
+                  <span className="text-xs text-text-muted">点击添加/移除</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {activePool.stocks.map(stock => (
+                    <button
+                      key={stock.symbol}
+                      onClick={() => toggleSymbol(stock.symbol)}
+                      className={`px-2 py-1 rounded text-xs font-medium transition-all border ${
+                        selectedSymbols.includes(stock.symbol)
+                          ? "bg-accent-primary/10 border-accent-primary text-accent-primary"
+                          : "bg-bg-secondary border-border-color text-text-secondary hover:text-text-primary hover:border-accent-primary/50"
+                      }`}
+                    >
+                      {stock.symbol}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            {batchRunning && (
+              <div className="bg-bg-tertiary rounded-lg p-4 border border-border-color">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-text-primary">批量回测进行中...</span>
+                  <span className="text-sm text-accent-primary font-mono">{Math.round(batchProgress * 100)}%</span>
+                </div>
+                <div className="h-2 bg-bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-accent-primary rounded-full transition-all duration-300"
+                    style={{ width: `${batchProgress * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Run button */}
+            <div className="flex gap-3">
+              <button
+                onClick={runBatchBacktestHandler}
+                disabled={batchRunning || selectedSymbols.length === 0}
+                className="flex items-center gap-2 bg-accent-primary text-bg-primary px-6 py-3 rounded-lg font-medium hover:bg-accent-primary/90 disabled:opacity-50 text-sm transition-all shadow-[0_0_15px_rgba(0,212,255,0.3)]"
+              >
+                {batchRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                {batchRunning ? "回测中..." : "开始批量回测"}
+              </button>
+              {batchRunning && (
+                <button
+                  onClick={cancelBatch}
+                  className="flex items-center gap-2 bg-accent-danger/10 border border-accent-danger text-accent-danger px-6 py-3 rounded-lg font-medium hover:bg-accent-danger/20 text-sm transition-all"
+                >
+                  <X size={16} />
+                  取消
+                </button>
+              )}
+            </div>
+
+            {/* Batch results comparison table */}
+            {batchResults.length > 0 && !batchRunning && (
+              <div className="bg-bg-secondary rounded-xl border border-border-color overflow-hidden">
+                <div className="p-4 border-b border-border-color flex items-center gap-2">
+                  <BarChart2 size={16} className="text-accent-primary" />
+                  <h3 className="font-semibold text-sm">回测结果对比</h3>
+                  <span className="ml-auto text-xs text-text-muted">
+                    {sortedResults.length} 个标的 · 点击表头排序
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border-color">
+                        <th className="text-left px-4 py-3 text-text-muted font-medium text-xs">标的</th>
+                        <th
+                          className="text-right px-4 py-3 text-text-muted font-medium text-xs cursor-pointer hover:text-accent-primary"
+                          onClick={() => toggleSort("totalReturn")}
+                        >
+                          总收益率 <SortIcon field="totalReturn" />
+                        </th>
+                        <th
+                          className="text-right px-4 py-3 text-text-muted font-medium text-xs cursor-pointer hover:text-accent-primary"
+                          onClick={() => toggleSort("sharpeRatio")}
+                        >
+                          夏普比率 <SortIcon field="sharpeRatio" />
+                        </th>
+                        <th
+                          className="text-right px-4 py-3 text-text-muted font-medium text-xs cursor-pointer hover:text-accent-primary"
+                          onClick={() => toggleSort("maxDrawdown")}
+                        >
+                          最大回撤 <SortIcon field="maxDrawdown" />
+                        </th>
+                        <th
+                          className="text-right px-4 py-3 text-text-muted font-medium text-xs cursor-pointer hover:text-accent-primary"
+                          onClick={() => toggleSort("winRate")}
+                        >
+                          胜率 <SortIcon field="winRate" />
+                        </th>
+                        <th
+                          className="text-right px-4 py-3 text-text-muted font-medium text-xs cursor-pointer hover:text-accent-primary"
+                          onClick={() => toggleSort("tradeCount")}
+                        >
+                          交易次数 <SortIcon field="tradeCount" />
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedResults.map((r, idx) => (
+                        <tr
+                          key={r.symbol}
+                          className={`border-b border-border-color/30 last:border-0 ${
+                            idx === 0 ? "bg-accent-primary/5" : ""
+                          } hover:bg-bg-tertiary transition-colors`}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              {idx === 0 && (
+                                <span className="text-xs bg-accent-primary text-bg-primary px-1.5 py-0.5 rounded font-bold">TOP</span>
+                              )}
+                              <span className="font-mono font-medium text-accent-primary">{r.symbol}</span>
+                              <span className="text-text-secondary text-xs">{r.name}</span>
+                            </div>
+                          </td>
+                          <td className={`text-right px-4 py-3 font-mono ${
+                            r.total_return >= 0 ? "text-accent-success" : "text-accent-danger"
+                          }`}>
+                            {r.total_return >= 0 ? "+" : ""}{r.total_return.toFixed(2)}%
+                          </td>
+                          <td className="text-right px-4 py-3 font-mono text-accent-primary">
+                            {r.sharpe_ratio.toFixed(2)}
+                          </td>
+                          <td className="text-right px-4 py-3 font-mono text-accent-danger">
+                            -{Math.abs(r.max_drawdown).toFixed(2)}%
+                          </td>
+                          <td className="text-right px-4 py-3 font-mono text-text-primary">
+                            {r.win_rate.toFixed(1)}%
+                          </td>
+                          <td className="text-right px-4 py-3 font-mono text-text-muted">
+                            {r.trade_count}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Results */}
-      {analysis && (
+      {analysis && !batchMode && (
         <>
           {/* Stock Header */}
           <div className="bg-bg-secondary rounded-xl p-5 border border-border-color">
@@ -305,7 +651,7 @@ export default function AnalysisPage() {
       )}
 
       {/* Pool Stock Quick Select */}
-      {searchMode === "pool" && activePool && activePool.stocks.length > 0 && (
+      {searchMode === "pool" && activePool && activePool.stocks.length > 0 && !batchMode && (
         <div className="bg-bg-secondary rounded-xl border border-border-color overflow-hidden">
           <div className="p-4 border-b border-border-color flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -333,11 +679,20 @@ export default function AnalysisPage() {
       )}
 
       {/* Empty State */}
-      {!loading && !analysis && (
+      {!loading && !analysis && !batchMode && (
         <div className="bg-bg-secondary rounded-xl p-12 text-center border border-border-color">
           <p className="text-5xl mb-4">📊</p>
           <p className="text-text-secondary font-medium mb-1">输入股票代码开始分析</p>
           <p className="text-text-muted text-sm mt-2">支持沪深A股所有股票</p>
+        </div>
+      )}
+
+      {/* Batch empty state */}
+      {batchMode && batchResults.length === 0 && !batchRunning && (
+        <div className="bg-bg-secondary rounded-xl p-12 text-center border border-border-color">
+          <BarChart2 size={64} className="mx-auto mb-4 text-text-muted opacity-30" />
+          <p className="text-text-secondary font-medium mb-1">批量回测</p>
+          <p className="text-text-muted text-sm mt-2">从股票池导入或手动选择标的开始批量回测</p>
         </div>
       )}
     </div>

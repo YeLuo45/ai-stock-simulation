@@ -186,6 +186,22 @@ class BacktestResponse(BaseModel):
     equity_curve: List[Dict[str, float]]
 
 
+class BatchBacktestResult(BaseModel):
+    symbol: str
+    name: str
+    total_return: float
+    sharpe_ratio: float
+    max_drawdown: float
+    win_rate: float
+    trade_count: int
+
+
+class BatchBacktestResponse(BaseModel):
+    results: List[BatchBacktestResult]
+    failed: List[str]
+    progress: float  # 0.0 to 1.0
+
+
 class TechnicalAnalysisRequest(BaseModel):
     symbol: str
     indicator_types: List[str] = Field(
