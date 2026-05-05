@@ -29,10 +29,21 @@ jobs:
           VITE_DEMO_MODE: 'true'
 
       - name: Deploy to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
+          echo "Current dir: $(pwd)"
+          echo "Dist contents:"
+          ls -la dist/ || echo "dist not found"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          ls -la $GITHUB_WORKSPACE/
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          WORKSPACE="$GITHUB_WORKSPACE"
+          echo "Workspace is: $WORKSPACE"
 
           # Check if gh-pages remote branch exists
           if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
@@ -45,12 +56,17 @@ jobs:
             git checkout --orphan gh-pages
           fi
 
-          # Remove old content (but not .git)
+          # Remove old content
+          echo "Current gh-pages contents before cleanup:"
           ls -la
+
+          # Remove everything except .git
           find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} + 2>/dev/null || true
 
-          # Copy build output
-          cp -r dist/* .
+          # Copy build output from workspace
+          echo "Copying dist from $WORKSPACE/dist to $(pwd)"
+          cp -r "$WORKSPACE/dist" .
+          cp -r "$WORKSPACE/dist/." .
           ls -la
 
           # Commit and push
