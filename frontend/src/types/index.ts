@@ -130,7 +130,18 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool";
+
+// ============== Stock Pool ==============
+
+export interface StockPool {
+  id: string;
+  name: string;
+  description?: string;
+  stocks: StockInfo[];
+  created_at: string;
+  updated_at: string;
+}
 
 // ============== IPO Evaluation ==============
 

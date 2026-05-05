@@ -2,7 +2,7 @@
  * Global state store using Zustand
  */
 import { create } from "zustand";
-import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult } from "../types";
+import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool } from "../types";
 
 interface AppState {
   // Navigation
@@ -37,6 +37,15 @@ interface AppState {
   // IPO Evaluation
   ipoResult: IPOEvaluationResult | null;
   setIpoResult: (result: IPOEvaluationResult | null) => void;
+
+  // Stock Pools
+  stockPools: StockPool[];
+  setStockPools: (pools: StockPool[]) => void;
+  addStockPool: (pool: StockPool) => void;
+  updateStockPool: (id: string, pool: Partial<StockPool>) => void;
+  deleteStockPool: (id: string) => void;
+  activePoolId: string | null;
+  setActivePoolId: (id: string | null) => void;
 
   // Loading states
   isLoading: boolean;
@@ -74,6 +83,18 @@ export const useStore = create<AppState>((set) => ({
 
   ipoResult: null,
   setIpoResult: (ipoResult) => set({ ipoResult }),
+
+  stockPools: [],
+  setStockPools: (stockPools) => set({ stockPools }),
+  addStockPool: (pool) => set((state) => ({ stockPools: [...state.stockPools, pool] })),
+  updateStockPool: (id, pool) => set((state) => ({
+    stockPools: state.stockPools.map((p) => p.id === id ? { ...p, ...pool } : p),
+  })),
+  deleteStockPool: (id) => set((state) => ({
+    stockPools: state.stockPools.filter((p) => p.id !== id),
+  })),
+  activePoolId: null,
+  setActivePoolId: (activePoolId) => set({ activePoolId }),
 
   isLoading: false,
   setLoading: (isLoading) => set({ isLoading }),

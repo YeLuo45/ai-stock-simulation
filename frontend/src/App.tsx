@@ -8,6 +8,7 @@ import TradingPage from './pages/TradingPage'
 import AnalysisPage from './pages/AnalysisPage'
 import SettingsPage from './pages/SettingsPage'
 import IPOEvaluationPage from './pages/IPOEvaluationPage'
+import StockPoolPage from './pages/StockPoolPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -43,6 +44,8 @@ function App() {
         return <TradingPage />
       case 'analysis':
         return <AnalysisPage />
+      case 'stockpool':
+        return <StockPoolPage />
       case 'settings':
         return <SettingsPage />
       case 'ipo':

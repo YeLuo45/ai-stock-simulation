@@ -28,6 +28,7 @@ def get_db():
 def init_db():
     """Initialize all database tables."""
     from models import Portfolio, Position, Trade, StockCache, AIModelConfig, BacktestResult, AIModelPriority, DataSource
+    from routers.stock_pools import StockPool, StockPoolItem
     Base.metadata.create_all(bind=engine)
     # Seed default data sources if empty
     _seed_data_sources()
