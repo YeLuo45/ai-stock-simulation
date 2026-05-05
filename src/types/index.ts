@@ -108,6 +108,7 @@ export interface BacktestResponse {
   return_distribution: ReturnDistribution[];
   monthly_returns: { month: string; return_pct: number }[];
   trades: BacktestTrade[];
+  kline_data?: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
 }
 
 export interface BacktestTrade {

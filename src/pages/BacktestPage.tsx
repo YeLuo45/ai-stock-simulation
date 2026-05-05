@@ -1,13 +1,15 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../store'
 import { runBacktest, getBacktestResults, explainBacktest, type BacktestIndicator } from '../services/api'
-import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Trash2, Settings2, PieChart } from 'lucide-react'
+import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Trash2, Settings2, PieChart, Download } from 'lucide-react'
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
   BarChart, Bar, Cell, ComposedChart, Area, AreaChart
 } from 'recharts'
 import clsx from 'clsx'
 import type { BacktestResponse } from '../types'
+import KLineChart from '../components/KLineChart'
+import { exportBacktestToCSV } from '../services/export'
 
 // Indicator presets
 const INDICATOR_PRESETS: Record<string, BacktestIndicator> = {
@@ -77,6 +79,7 @@ export default function BacktestPage() {
     try {
       const result = await runBacktest({
         strategy_name: strategyName || '自定义策略',
+        symbols: ['600519'], // 默认使用贵州茅台
         start_date: startDate,
         end_date: endDate,
         initial_cash: initialCash,
@@ -89,6 +92,13 @@ export default function BacktestPage() {
       showNotification('error', err?.message ?? '回测失败')
     } finally {
       setRunning(false)
+    }
+  }
+
+  const handleExportCSV = () => {
+    if (results) {
+      exportBacktestToCSV(results)
+      showNotification('success', '报告已导出')
     }
   }
 
@@ -361,18 +371,34 @@ export default function BacktestPage() {
             />
           </div>
 
+          {/* K线图 */}
+          {results.kline_data && results.kline_data.length > 0 && (
+            <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
+              <KLineChart data={results.kline_data} symbol="600519" height={350} />
+            </div>
+          )}
+
           {/* Equity Curve + Benchmark */}
           <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">资金曲线</h3>
-              <div className="flex items-center gap-4 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-0.5 bg-accent-primary" />
-                  <span className="text-text-muted">策略收益</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-0.5 bg-text-muted opacity-50" style={{ borderStyle: 'dashed' }} />
-                  <span className="text-text-muted">基准线</span>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleExportCSV}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-accent-primary/50 text-accent-primary hover:bg-accent-primary/10 flex items-center gap-1.5"
+                >
+                  <Download size={14} />
+                  导出CSV
+                </button>
+                <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-0.5 bg-accent-primary" />
+                    <span className="text-text-muted">策略收益</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-0.5 bg-text-muted opacity-50" style={{ borderStyle: 'dashed' }} />
+                    <span className="text-text-muted">基准线</span>
+                  </div>
                 </div>
               </div>
             </div>
