@@ -16,6 +16,8 @@ import type {
   IPOEvaluationResult,
   DataSourceResponse,
   StockInfo,
+  EquityPoint,
+  DrawdownPoint,
 } from "../types";
 
 import {
@@ -519,5 +521,82 @@ export async function runMultiStrategyComparison(req: MultiStrategyRequest): Pro
   return {
     strategies: results,
     kline_data: klineData,
+  };
+}
+
+// ============== Optimization API ==============
+
+export interface OptimizationResultDetail {
+  params: Record<string, number>;
+  total_return: number;
+  annual_return: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  profit_loss_ratio: number;
+  total_trades: number;
+  equity_curve: EquityPoint[];
+  drawdown_curve: DrawdownPoint[];
+  kline_data?: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
+}
+
+export interface OptimizationResponse {
+  results: OptimizationResultDetail[];
+  best_params: Record<string, number>;
+  kline_data?: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
+}
+
+export async function runOptimization(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  initialCash: number,
+  optimizationParams: Record<string, [number, number, number]>
+): Promise<OptimizationResponse> {
+  // Run grid search optimization
+  const results = gridSearchOptimization(
+    symbol,
+    startDate,
+    endDate,
+    initialCash,
+    optimizationParams
+  );
+
+  // Get the best result and run a full backtest with kline data
+  if (results.length > 0) {
+    const best = results[0];
+    const { result: bestResult, klineData } = runSingleBacktest(
+      symbol,
+      startDate,
+      endDate,
+      initialCash,
+      best.params['MA.short'] || 5,
+      best.params['MA.long'] || 20
+    );
+
+    // Convert to detailed results with equity curve data
+    const detailedResults: OptimizationResultDetail[] = results.map(r => ({
+      params: r.params,
+      total_return: r.total_return,
+      annual_return: r.annual_return,
+      sharpe_ratio: r.sharpe_ratio,
+      max_drawdown: r.max_drawdown,
+      win_rate: r.win_rate,
+      profit_loss_ratio: r.profit_loss_ratio,
+      total_trades: r.total_trades,
+      equity_curve: bestResult.equity_curve, // Use best result's curve for reference
+      drawdown_curve: bestResult.drawdown_curve,
+    }));
+
+    return {
+      results: detailedResults,
+      best_params: best.params,
+      kline_data: klineData,
+    };
+  }
+
+  return {
+    results: [],
+    best_params: {},
   };
 }

@@ -13,9 +13,11 @@ export interface BacktestIndicator {
 export interface OptimizationResult {
   params: Record<string, number>;
   total_return: number;
+  annual_return: number;
   sharpe_ratio: number;
   max_drawdown: number;
   win_rate: number;
+  profit_loss_ratio: number;
   total_trades: number;
 }
 
@@ -328,9 +330,11 @@ export function gridSearchOptimization(
       results.push({
         params: { 'MA.short': shortPeriod, 'MA.long': longPeriod },
         total_return: result.total_return,
+        annual_return: result.annual_return,
         sharpe_ratio: result.sharpe_ratio,
         max_drawdown: result.max_drawdown,
         win_rate: result.win_rate,
+        profit_loss_ratio: result.profit_loss_ratio,
         total_trades: result.total_trades,
       });
     }

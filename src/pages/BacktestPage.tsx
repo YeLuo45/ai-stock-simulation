@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../store'
-import { runBacktest, getBacktestResults, explainBacktest, type BacktestIndicator } from '../services/api'
+import { runBacktest, getBacktestResults, explainBacktest, runOptimization, type BacktestIndicator, type OptimizationResultDetail } from '../services/api'
 import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Trash2, Settings2, PieChart, Download } from 'lucide-react'
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -10,6 +10,7 @@ import clsx from 'clsx'
 import type { BacktestResponse } from '../types'
 import KLineChart from '../components/KLineChart'
 import { exportBacktestToCSV } from '../services/export'
+import OptimizationPanel from '../components/OptimizationPanel'
 
 // Indicator presets
 const INDICATOR_PRESETS: Record<string, BacktestIndicator> = {
@@ -45,11 +46,11 @@ export default function BacktestPage() {
   // Optimization mode
   const [optimizationMode, setOptimizationMode] = useState(false)
   const [optimizationParams, setOptimizationParams] = useState<Record<string, [number, number, number]>>({
-    'MA.period': [5, 60, 5],
-    'RSI.period': [7, 21, 2],
-    'RSI.overbought': [60, 80, 5],
-    'RSI.oversold': [20, 40, 5],
+    'MA.short': [5, 20, 5],
+    'MA.long': [20, 60, 10],
   })
+  const [optimizationResults, setOptimizationResults] = useState<OptimizationResultDetail[] | null>(null)
+  const [optimizationRunning, setOptimizationRunning] = useState(false)
 
   const toggleIndicator = useCallback((type: string) => {
     setIndicators(prev => prev.map(ind => 
@@ -111,6 +112,51 @@ export default function BacktestPage() {
       showNotification('error', '解读失败')
     }
   }
+
+  const handleRunOptimization = async () => {
+    setOptimizationRunning(true)
+    try {
+      const optResponse = await runOptimization(
+        '600519',
+        startDate,
+        endDate,
+        initialCash,
+        optimizationParams
+      )
+      setOptimizationResults(optResponse.results)
+      showNotification('success', `参数优化完成，共测试 ${optResponse.results.length} 组参数`)
+    } catch (err: any) {
+      showNotification('error', err?.message ?? '参数优化失败')
+    } finally {
+      setOptimizationRunning(false)
+    }
+  }
+
+  const handleApplyBestParams = useCallback((shortPeriod: number, longPeriod: number) => {
+    setIndicators(prev => {
+      const updated = [...prev]
+      const maIndicators = updated.filter(i => i.type === 'MA')
+      
+      // Update existing MA indicators
+      if (maIndicators.length >= 2) {
+        // Sort by period and update
+        const sorted = [...maIndicators].sort((a, b) => (a.params.period || 20) - (b.params.period || 20))
+        sorted[0].params.period = shortPeriod
+        sorted[1].params.period = longPeriod
+      } else if (maIndicators.length === 1) {
+        maIndicators[0].params.period = shortPeriod
+        // Add another MA indicator
+        updated.push({ type: 'MA', enabled: true, params: { period: longPeriod } })
+      } else {
+        // Add two MA indicators
+        updated.push({ type: 'MA', enabled: true, params: { period: shortPeriod } })
+        updated.push({ type: 'MA', enabled: true, params: { period: longPeriod } })
+      }
+      
+      return updated
+    })
+    showNotification('success', `已应用参数: MA${shortPeriod}/MA${longPeriod}`)
+  }, [showNotification])
 
   const equityColor = results ? (results.total_return >= 0 ? '#10b981' : '#ef4444') : '#00d4ff'
   const drawdownColor = '#ef4444'
@@ -270,46 +316,16 @@ export default function BacktestPage() {
 
         {/* Optimization Panel */}
         {optimizationMode && (
-          <div className="mt-4 p-4 bg-bg-tertiary rounded-lg border border-border-color">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">参数优化范围</span>
-              <span className="text-text-muted text-xs">格式: 最小值, 最大值, 步长</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {Object.entries(optimizationParams).map(([key, [min, max, step]]) => (
-                <div key={key} className="flex items-center gap-1.5">
-                  <span className="text-text-muted text-xs w-20 truncate">{key}</span>
-                  <input
-                    type="number"
-                    value={min}
-                    onChange={(e) => setOptimizationParams(prev => ({ 
-                      ...prev, [key]: [Number(e.target.value), max, step] 
-                    }))}
-                    className="w-14 bg-bg-secondary border border-border-color rounded px-1.5 py-1 text-xs focus:outline-none"
-                    placeholder="最小"
-                  />
-                  <input
-                    type="number"
-                    value={max}
-                    onChange={(e) => setOptimizationParams(prev => ({ 
-                      ...prev, [key]: [min, Number(e.target.value), step] 
-                    }))}
-                    className="w-14 bg-bg-secondary border border-border-color rounded px-1.5 py-1 text-xs focus:outline-none"
-                    placeholder="最大"
-                  />
-                  <input
-                    type="number"
-                    value={step}
-                    onChange={(e) => setOptimizationParams(prev => ({ 
-                      ...prev, [key]: [min, max, Number(e.target.value)] 
-                    }))}
-                    className="w-12 bg-bg-secondary border border-border-color rounded px-1.5 py-1 text-xs focus:outline-none"
-                    placeholder="步长"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          <OptimizationPanel
+            optimizationParams={optimizationParams}
+            onParamsChange={setOptimizationParams}
+            onRunOptimization={handleRunOptimization}
+            optimizationResults={optimizationResults}
+            isRunning={optimizationRunning}
+            onApplyBestParams={handleApplyBestParams}
+            shortPeriod={indicators.find(i => i.type === 'MA')?.params.period || 5}
+            longPeriod={indicators.filter(i => i.type === 'MA').sort((a, b) => (a.params.period || 20) - (b.params.period || 20))[1]?.params.period || 20}
+          />
         )}
 
         <button
