@@ -9,7 +9,7 @@ import {
 import clsx from 'clsx'
 import type { BacktestResponse } from '../types'
 import KLineChart from '../components/KLineChart'
-import { exportBacktestToCSV } from '../services/export'
+import { exportBacktestToCSV, exportBacktestToHTML, printBacktestReport } from '../services/export'
 import OptimizationPanel from '../components/OptimizationPanel'
 
 // Indicator presets
@@ -100,6 +100,19 @@ export default function BacktestPage() {
     if (results) {
       exportBacktestToCSV(results)
       showNotification('success', '报告已导出')
+    }
+  }
+
+  const handleExportHTML = async () => {
+    if (results) {
+      await exportBacktestToHTML(results, 'equity-curve-chart')
+      showNotification('success', 'HTML报告已导出')
+    }
+  }
+
+  const handlePrintReport = async () => {
+    if (results) {
+      await printBacktestReport(results, 'equity-curve-chart')
     }
   }
 
@@ -404,7 +417,21 @@ export default function BacktestPage() {
                   className="px-3 py-1.5 text-xs rounded-lg border border-accent-primary/50 text-accent-primary hover:bg-accent-primary/10 flex items-center gap-1.5"
                 >
                   <Download size={14} />
-                  导出CSV
+                  CSV
+                </button>
+                <button
+                  onClick={handleExportHTML}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-accent-secondary/50 text-accent-secondary hover:bg-accent-secondary/10 flex items-center gap-1.5"
+                >
+                  <Download size={14} />
+                  HTML
+                </button>
+                <button
+                  onClick={handlePrintReport}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-border-color text-text-muted hover:border-accent-primary/50 hover:text-accent-primary flex items-center gap-1.5"
+                >
+                  <Download size={14} />
+                  PDF
                 </button>
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-1.5">
@@ -418,7 +445,7 @@ export default function BacktestPage() {
                 </div>
               </div>
             </div>
-            <div className="h-64">
+            <div className="h-64" id="equity-curve-chart">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={results.equity_curve}>
                   <XAxis
