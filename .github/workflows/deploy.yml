@@ -7,74 +7,56 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+
       - name: Install
         run: npm ci
+
       - name: Build
         run: npm run build
         env:
           VITE_DEMO_MODE: 'true'
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Download artifact
-        uses: actions/download-pages-artifact@v3
-        with:
-          path: ./dist
-
-      - name: Setup Git
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
 
       - name: Deploy to gh-pages
         run: |
           set -e
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
           # Check if gh-pages remote branch exists
           if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
-            echo "gh-pages exists, fetching..."
-            git fetch origin gh-pages
+            echo "Fetching existing gh-pages..."
+            git fetch origin gh-pages:gh-pages
             git checkout gh-pages
             git pull origin gh-pages || true
           else
-            echo "Creating new gh-pages branch..."
+            echo "Creating new gh-pages..."
             git checkout --orphan gh-pages
           fi
 
-          # Remove old files but keep .git
+          # Remove old content (but not .git)
+          ls -la
           find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} + 2>/dev/null || true
 
-          # Copy new dist content
+          # Copy build output
           cp -r dist/* .
-          cp -r dist/.[!.]* . 2>/dev/null || true
+          ls -la
 
-          # Add and commit
+          # Commit and push
           git add .
           git status
           git commit -m "Deploy $(date +%Y%m%d-%H%M%S)"
           git push origin gh-pages --force
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          echo "Deployed to gh-pages"
