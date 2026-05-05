@@ -42,6 +42,7 @@ import {
   getStockQuote as fetchQuote,
   getMultipleQuotes as fetchMultipleQuotes,
   searchStocks as doSearchStocks,
+  getHistoricalKline,
 } from "./quotes";
 
 import {
@@ -175,10 +176,14 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestRespons
     optimizationMode?: boolean;
     optimizationParams?: Record<string, [number, number, number]>;
   } || {};
-  
+
   const symbols = req.symbols?.length ? req.symbols : [DEFAULT_STOCKS[0].symbol];
   const symbol = symbols[0];
-  
+
+  // 尝试获取真实K线数据
+  let realKlineData = await getHistoricalKline(symbol, req.start_date, req.end_date, 'qfq');
+  const useRealData = realKlineData.length > 0;
+
   // 检查是否启用参数优化模式
   if (params.optimizationMode && params.optimizationParams) {
     const results = gridSearchOptimization(
@@ -186,9 +191,10 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestRespons
       req.start_date,
       req.end_date,
       req.initial_cash,
-      params.optimizationParams
+      params.optimizationParams,
+      useRealData ? realKlineData : undefined
     );
-    
+
     // 使用最优参数运行回测
     if (results.length > 0) {
       const best = results[0];
@@ -198,11 +204,12 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestRespons
         req.end_date,
         req.initial_cash,
         best.params['MA.short'] || 5,
-        best.params['MA.long'] || 20
+        best.params['MA.long'] || 20,
+        useRealData ? realKlineData : undefined
       );
-      result.strategy_name = req.strategy_name || 'MA交叉策略(优化)';
+      result.strategy_name = req.strategy_name || 'MA交叉策略(优化)' + (useRealData ? '[真实数据]' : '[模拟数据]');
       result.kline_data = klineData;
-      
+
       // 保存到IndexedDB
       const backtestData: BacktestResultData = {
         id: result.id,
@@ -212,15 +219,15 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestRespons
         created_at: new Date().toISOString(),
       };
       await saveBacktestResult(backtestData);
-      
+
       return result;
     }
   }
-  
+
   // 从indicators提取MA参数
   let shortPeriod = 5;
   let longPeriod = 20;
-  
+
   if (params.indicators) {
     const maIndicators = params.indicators.filter(i => i.type === 'MA' && i.enabled);
     if (maIndicators.length >= 2) {
@@ -231,17 +238,18 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestRespons
       shortPeriod = maIndicators[0].params.period || 5;
     }
   }
-  
+
   const { result, klineData } = runSingleBacktest(
     symbol,
     req.start_date,
     req.end_date,
     req.initial_cash,
     shortPeriod,
-    longPeriod
+    longPeriod,
+    useRealData ? realKlineData : undefined
   );
-  
-  result.strategy_name = req.strategy_name || `MA${shortPeriod}/MA${longPeriod}交叉策略`;
+
+  result.strategy_name = req.strategy_name || `MA${shortPeriod}/MA${longPeriod}交叉策略` + (useRealData ? '[真实数据]' : '[模拟数据]');
   result.kline_data = klineData;
   
   // 保存到IndexedDB
@@ -510,12 +518,17 @@ export interface MultiStrategyComparisonResponse {
 }
 
 export async function runMultiStrategyComparison(req: MultiStrategyRequest): Promise<MultiStrategyComparisonResponse> {
+  // 尝试获取真实K线数据（所有策略共用同一份数据）
+  let realKlineData = await getHistoricalKline(req.symbol, req.startDate, req.endDate, 'qfq');
+  const useRealData = realKlineData.length > 0;
+
   const { results, klineData } = doMultiStrategyBacktest(
     req.symbol,
     req.startDate,
     req.endDate,
     req.initialCash,
-    req.strategies
+    req.strategies,
+    useRealData ? realKlineData : undefined
   );
 
   return {
@@ -553,13 +566,18 @@ export async function runOptimization(
   initialCash: number,
   optimizationParams: Record<string, [number, number, number]>
 ): Promise<OptimizationResponse> {
+  // 尝试获取真实K线数据
+  let realKlineData = await getHistoricalKline(symbol, startDate, endDate, 'qfq');
+  const useRealData = realKlineData.length > 0;
+
   // Run grid search optimization
   const results = gridSearchOptimization(
     symbol,
     startDate,
     endDate,
     initialCash,
-    optimizationParams
+    optimizationParams,
+    useRealData ? realKlineData : undefined
   );
 
   // Get the best result and run a full backtest with kline data
@@ -571,7 +589,8 @@ export async function runOptimization(
       endDate,
       initialCash,
       best.params['MA.short'] || 5,
-      best.params['MA.long'] || 20
+      best.params['MA.long'] || 20,
+      useRealData ? realKlineData : undefined
     );
 
     // Convert to detailed results with equity curve data

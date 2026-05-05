@@ -113,6 +113,13 @@ function generateMASignals(
 
 /**
  * 运行单次回测
+ * @param symbol 股票代码
+ * @param startDate 开始日期
+ * @param endDate 结束日期
+ * @param initialCash 初始资金
+ * @param shortPeriod 短期MA周期
+ * @param longPeriod 长期MA周期
+ * @param realKlineData 可选的真实K线数据，如果提供则使用真实数据，否则生成模拟数据
  */
 export function runSingleBacktest(
   symbol: string,
@@ -120,13 +127,20 @@ export function runSingleBacktest(
   endDate: string,
   initialCash: number,
   shortPeriod: number = 5,
-  longPeriod: number = 20
+  longPeriod: number = 20,
+  realKlineData?: Array<{ date: string; open: number; close: number; high: number; low: number; volume: number }>
 ): {
   result: BacktestResponse;
   klineData: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
 } {
-  const klineData = generateHistoricalData(symbol, startDate, endDate);
-  const signals = generateMASignals(klineData, shortPeriod, longPeriod);
+  const klineData = realKlineData
+    ? realKlineData.map(d => ({ time: d.date, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }))
+    : generateHistoricalData(symbol, startDate, endDate);
+  const signals = generateMASignals(
+    klineData.map(d => ({ time: d.time, close: d.close })),
+    shortPeriod,
+    longPeriod
+  );
   
   let cash = initialCash;
   let position = 0;
@@ -303,7 +317,8 @@ export function gridSearchOptimization(
   startDate: string,
   endDate: string,
   initialCash: number,
-  optimizationParams: Record<string, [number, number, number]>
+  optimizationParams: Record<string, [number, number, number]>,
+  realKlineData?: Array<{ date: string; open: number; close: number; high: number; low: number; volume: number }>
 ): OptimizationResult[] {
   const results: OptimizationResult[] = [];
 
@@ -325,7 +340,7 @@ export function gridSearchOptimization(
     for (const longPeriod of longMAPeriods) {
       if (shortPeriod >= longPeriod) continue; // 短周期必须小于长周期
 
-      const { result } = runSingleBacktest(symbol, startDate, endDate, initialCash, shortPeriod, longPeriod);
+      const { result } = runSingleBacktest(symbol, startDate, endDate, initialCash, shortPeriod, longPeriod, realKlineData);
 
       results.push({
         params: { 'MA.short': shortPeriod, 'MA.long': longPeriod },
@@ -354,7 +369,8 @@ export function runMultiStrategyBacktest(
   startDate: string,
   endDate: string,
   initialCash: number,
-  strategies: Array<{ id: string; name: string; shortPeriod: number; longPeriod: number; color: string }>
+  strategies: Array<{ id: string; name: string; shortPeriod: number; longPeriod: number; color: string }>,
+  realKlineData?: Array<{ date: string; open: number; close: number; high: number; low: number; volume: number }>
 ): {
   results: import('../types').MultiStrategyResult[];
   klineData: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
@@ -364,7 +380,7 @@ export function runMultiStrategyBacktest(
 
   for (const strategy of strategies) {
     const { result, klineData: kd } = runSingleBacktest(
-      symbol, startDate, endDate, initialCash, strategy.shortPeriod, strategy.longPeriod
+      symbol, startDate, endDate, initialCash, strategy.shortPeriod, strategy.longPeriod, realKlineData
     );
 
     if (klineData.length === 0) {

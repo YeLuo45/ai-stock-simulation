@@ -217,3 +217,96 @@ export function getDefaultStocks(): StockInfo[] {
 export function clearPriceCache(): void {
   priceCache.clear();
 }
+
+// ============== Historical K-line Data ==============
+
+export interface KlineData {
+  date: string;      // "2023-01-03"
+  open: number;
+  close: number;
+  high: number;
+  low: number;
+  volume: number;
+}
+
+interface EastMoneyKlineResponse {
+  data: {
+    klines: string[];
+  };
+}
+
+/**
+ * Get historical K-line data from East Money
+ * API: https://push2his.eastmoney.com/api/qt/stock/kline/get
+ * klt=101 means daily K-line, fqt=1 means forward adjusted (qfq)
+ */
+export async function getHistoricalKline(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  adjust: 'qfq' | 'hfq' | '' = 'qfq'
+): Promise<KlineData[]> {
+  try {
+    // Normalize symbol for East Money secid
+    // 1 = Shanghai, 0 = Shenzhen
+    let market: string;
+    if (symbol.startsWith("6")) {
+      market = "1";
+    } else if (symbol.startsWith("0") || symbol.startsWith("3")) {
+      market = "0";
+    } else if (symbol.startsWith("4") || symbol.startsWith("8")) {
+      market = "0"; // Beijing / Nanjing
+    } else {
+      throw new Error(`Unsupported symbol: ${symbol}`);
+    }
+
+    // fqt: 0=none, 1=qfq (forward adjusted), 2=hfq (backward adjusted)
+    const fqt = adjust === 'qfq' ? 1 : adjust === 'hfq' ? 2 : 0;
+
+    // Format dates as YYYYMMDD
+    const beg = startDate.replace(/-/g, '');
+    const end = endDate.replace(/-/g, '');
+
+    const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${market}.${symbol}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=${fqt}&beg=${beg}&end=${end}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "Referer": "https://quote.eastmoney.com/",
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data: EastMoneyKlineResponse = await response.json();
+
+    if (!data.data?.klines?.length) {
+      return [];
+    }
+
+    // Parse klines: "2023-01-03,open,close,high,low,volume,amount,..."
+    const klines: KlineData[] = data.data.klines.map((line: string) => {
+      const fields = line.split(",");
+      return {
+        date: fields[0],
+        open: parseFloat(fields[1]),
+        close: parseFloat(fields[2]),
+        high: parseFloat(fields[3]),
+        low: parseFloat(fields[4]),
+        volume: parseInt(fields[5]) || 0,
+      };
+    });
+
+    return klines;
+  } catch (err) {
+    console.warn(`Failed to fetch historical K-line for ${symbol}:`, err);
+    return [];
+  }
+}
