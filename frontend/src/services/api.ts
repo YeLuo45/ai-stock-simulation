@@ -390,6 +390,85 @@ export const getIndicators = async (symbol: string) => {
   return calculateAllIndicators(history);
 };
 
+// ============== K-line Data ==============
+
+export interface KLineData {
+  date: string;
+  open: number;
+  close: number;
+  high: number;
+  low: number;
+  volume: number;
+  turnover?: number;
+}
+
+export interface GetKlineOptions {
+  period?: "daily" | "weekly";
+  start_date?: string;
+  end_date?: string;
+  use_cache?: boolean;
+}
+
+export const getKlineData = async (symbol: string, options: GetKlineOptions = {}): Promise<{ data: KLineData[]; count: number; from_cache: boolean; latest_date?: string }> => {
+  const { period = "daily", start_date = "", end_date = "", use_cache = true } = options;
+
+  if (!isDemoMode) {
+    const params = new URLSearchParams({ period });
+    if (start_date) params.set("start_date", start_date);
+    if (end_date) params.set("end_date", end_date);
+    if (!use_cache) params.set("use_cache", "false");
+    const res = await fetch(`/api/kline/${encodeURIComponent(symbol)}?${params}`);
+    return res.json();
+  }
+
+  // Demo mode: generate mock data
+  await delay(300);
+  const stock = findStock(symbol);
+  const history = generatePriceHistory(stock.price, 120);
+  return {
+    data: history.map((h) => ({
+      date: h.date,
+      open: h.open,
+      close: h.close,
+      high: h.high,
+      low: h.low,
+      volume: h.volume || Math.random() * 10000000,
+    })),
+    count: history.length,
+    from_cache: false,
+    latest_date: history[history.length - 1]?.date,
+  };
+};
+
+export const refreshKline = async (symbol: string, period: "daily" | "weekly" = "daily", force = false) => {
+  if (!isDemoMode) {
+    const res = await fetch("/api/kline/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, period, force }),
+    });
+    return res.json();
+  }
+  return { symbol, period, records: 0, message: "Demo mode - no refresh needed" };
+};
+
+export const getAvailableKlineSymbols = async (period: "daily" | "weekly" = "daily") => {
+  if (!isDemoMode) {
+    const res = await fetch(`/api/kline/?period=${period}`);
+    return res.json();
+  }
+  return { symbols: [], count: 0 };
+};
+
+export const getIndexKline = async (symbol: string, options: GetKlineOptions = {}) => {
+  const { period = "daily" } = options;
+  if (!isDemoMode) {
+    const res = await fetch(`/api/kline/index/${encodeURIComponent(symbol)}?period=${period}`);
+    return res.json();
+  }
+  return { symbol, name: symbol, period, data: [], count: 0 };
+};
+
 // ============== AI Model Config ==============
 
 export const listModelConfigs = async (): Promise<AIModelConfig[]> => {

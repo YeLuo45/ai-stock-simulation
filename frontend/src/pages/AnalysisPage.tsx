@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useStore } from "../store";
-import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest } from "../services/api";
+import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest, getKlineData } from "../services/api";
 import { generatePriceHistory } from "../services/indicators";
 import type { OHLCV } from "../services/indicators";
 import type { TechnicalAnalysis, StockInfo, StockPool, BatchBacktestResult } from "../types";
@@ -25,6 +25,7 @@ export default function AnalysisPage() {
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [poolDropdownOpen, setPoolDropdownOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"search" | "pool">("search");
+  const [klinePeriod, setKlinePeriod] = useState<"daily" | "weekly">("daily");
 
   // Batch backtest state
   const [batchMode, setBatchMode] = useState(false);
@@ -45,15 +46,34 @@ export default function AnalysisPage() {
     } catch { setSearchResults([]); }
   };
 
-  const selectStock = (s: StockInfo) => {
+  const selectStock = async (s: StockInfo) => {
     setSymbol(s.symbol);
     setName(s.name);
     setSearchResults([]);
     setAnalysis(null);
     setIndicators({});
     setSearchMode("search");
-    const history = generatePriceHistory(s.price, 120);
-    setChartData(history);
+    // Try to load real K-line data
+    try {
+      const klineResult = await getKlineData(s.symbol, { period: klinePeriod });
+      if (klineResult.data && klineResult.data.length > 0) {
+        const ohlcvData: OHLCV[] = klineResult.data.map((k) => ({
+          date: k.date,
+          open: k.open,
+          high: k.high,
+          low: k.low,
+          close: k.close,
+          volume: k.volume,
+        }));
+        setChartData(ohlcvData);
+      } else {
+        const history = generatePriceHistory(s.price, 120);
+        setChartData(history);
+      }
+    } catch {
+      const history = generatePriceHistory(s.price, 120);
+      setChartData(history);
+    }
   };
 
   const selectFromPool = (pool: StockPool) => {
@@ -75,9 +95,29 @@ export default function AnalysisPage() {
       setAnalysis(a);
       setIndicators(ind.indicators || {});
       if (chartData.length === 0) {
-        const stock = { symbol, name, price: a.current_price };
-        const history = generatePriceHistory(stock.price, 120);
-        setChartData(history);
+        // Load real K-line data for chart
+        try {
+          const klineResult = await getKlineData(symbol, { period: klinePeriod });
+          if (klineResult.data && klineResult.data.length > 0) {
+            const ohlcvData: OHLCV[] = klineResult.data.map((k) => ({
+              date: k.date,
+              open: k.open,
+              high: k.high,
+              low: k.low,
+              close: k.close,
+              volume: k.volume,
+            }));
+            setChartData(ohlcvData);
+          } else {
+            const stock = { symbol, name, price: a.current_price };
+            const history = generatePriceHistory(stock.price, 120);
+            setChartData(history);
+          }
+        } catch {
+          const stock = { symbol, name, price: a.current_price };
+          const history = generatePriceHistory(stock.price, 120);
+          setChartData(history);
+        }
       }
       showNotification("success", "技术分析完成");
     } catch (e: unknown) {
@@ -320,6 +360,30 @@ export default function AnalysisPage() {
             >
               {loading ? "分析中..." : "开始分析"}
             </button>
+
+            {/* Period toggle */}
+            <div className="flex items-center gap-1 bg-bg-tertiary border border-border-color rounded-lg p-1">
+              <button
+                onClick={() => setKlinePeriod("daily")}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  klinePeriod === "daily"
+                    ? "bg-accent-primary text-bg-primary"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                日K
+              </button>
+              <button
+                onClick={() => setKlinePeriod("weekly")}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  klinePeriod === "weekly"
+                    ? "bg-accent-primary text-bg-primary"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                周K
+              </button>
+            </div>
           </div>
         )}
 

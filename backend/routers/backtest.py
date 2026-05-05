@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import BacktestRequest, BacktestResponse, BacktestResult, BatchBacktestResponse, BatchBacktestResult
-from data.market_data import get_kline_data, calculate_technicals, get_stock_list
+from data.market_data import calculate_technicals, get_stock_list
+from kline_cache import get_kline_with_cache
 from ai.chains import get_ai_service
 from datetime import datetime
 import random
@@ -37,7 +38,8 @@ def run_backtest(req: BacktestRequest, model_name: str = "minimax", db: Session 
 
     for sym in symbols:
         try:
-            klines = get_kline_data(sym, "daily", req.start_date, req.end_date)
+            klines_data, _ = get_kline_with_cache(sym, "daily", req.start_date, req.end_date)
+            klines = klines_data
             if len(klines) < 20:
                 continue
 
@@ -121,7 +123,8 @@ def run_backtest(req: BacktestRequest, model_name: str = "minimax", db: Session 
             "max_drawdown": round(max_drawdown, 2),
             "sharpe_ratio": round(sharpe, 2),
             "win_rate": round(win_rate, 2),
-            "total_trades": trades_count
+            "total_trades": trades_count,
+            "data_warning": "数据不足，使用模拟数据" if trades_count == 0 else None,
         })
     )
     db.add(result)
@@ -144,7 +147,8 @@ def run_backtest(req: BacktestRequest, model_name: str = "minimax", db: Session 
 async def _backtest_single_symbol(sym: str, start_date: str, end_date: str, initial_cash: float) -> BatchBacktestResult | None:
     """Backtest a single symbol, returns metrics or None on failure."""
     try:
-        klines = get_kline_data(sym, "daily", start_date, end_date)
+        klines_data, _ = get_kline_with_cache(sym, "daily", start_date, end_date)
+        klines = klines_data
         if len(klines) < 20:
             return None
 
