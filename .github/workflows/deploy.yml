@@ -6,37 +6,63 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-      - name: Install
+
+      - name: Install dependencies
         run: npm ci
+
       - name: Build
         run: npm run build
         env:
           VITE_DEMO_MODE: 'true'
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Create or update gh-pages branch
+        run: |
+          # Check if gh-pages exists
+          if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            echo "gh-pages exists, updating..."
+            git fetch origin gh-pages:gh-pages
+            git checkout gh-pages
+            # Remove old content
+            git rm -rf . --ignore-unmatched 2>/dev/null || true
+          else
+            echo "Creating new gh-pages branch..."
+            git checkout --orphan gh-pages
+            git rm -rf . --ignore-unmatched 2>/dev/null || true
+          fi
+
+          # Copy dist content to root
+          cp -r dist/* .
+          cp dist/.nojekyll . 2>/dev/null || true
+
+          # Add all files
+          git add .
+          git commit -m "Deploy $(date +%Y%m%d-%H%M%S)"
+
+      - name: Push to gh-pages
+        run: |
+          git push origin gh-pages --force
+
+      - name: Trigger Pages rebuild
+        run: |
+          sleep 5
+          gh api repos/YeLuo45/ai-stock-simulation/pages/builds -X POST || true
