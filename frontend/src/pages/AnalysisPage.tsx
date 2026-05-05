@@ -4,12 +4,12 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useStore } from "../store";
-import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest, getKlineData } from "../services/api";
+import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest, getKlineData, exportReport } from "../services/api";
 import { generatePriceHistory } from "../services/indicators";
 import type { OHLCV } from "../services/indicators";
 import type { TechnicalAnalysis, StockInfo, StockPool, BatchBacktestResult } from "../types";
 import KLineChart from "../components/KLineChart";
-import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play } from "lucide-react";
+import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play, FileText, FileSpreadsheet, FileDown } from "lucide-react";
 
 type SortField = "totalReturn" | "sharpeRatio" | "maxDrawdown" | "winRate" | "tradeCount";
 type SortDir = "asc" | "desc";
@@ -204,6 +204,106 @@ export default function AnalysisPage() {
     } else {
       setSortField(field);
       setSortDir("desc");
+    }
+  };
+
+  // ---- Export handlers ----
+  const handleExportPDF = async () => {
+    if (batchResults.length === 0) return;
+    try {
+      const topResult = sortedResults[0];
+      const avgReturn = sortedResults.reduce((s, r) => s + r.total_return, 0) / sortedResults.length;
+      const avgDD = sortedResults.reduce((s, r) => s + r.max_drawdown, 0) / sortedResults.length;
+      const avgSharpe = sortedResults.reduce((s, r) => s + r.sharpe_ratio, 0) / sortedResults.length;
+      const avgWinRate = sortedResults.reduce((s, r) => s + r.win_rate, 0) / sortedResults.length;
+      await exportReport({
+        type: "pdf",
+        strategy_name: `批量回测对比 (${batchResults.length}标的)`,
+        start_date: "2023-01-01",
+        end_date: "2026-04-01",
+        total_return: avgReturn,
+        annual_return: avgReturn / 3,
+        max_drawdown: Math.abs(avgDD),
+        sharpe_ratio: avgSharpe,
+        win_rate: avgWinRate,
+        total_trades: sortedResults.reduce((s, r) => s + r.trade_count, 0),
+        batch_results: sortedResults.map(r => ({
+          symbol: r.symbol,
+          name: r.name,
+          total_return: r.total_return,
+          sharpe_ratio: r.sharpe_ratio,
+          max_drawdown: r.max_drawdown,
+          win_rate: r.win_rate,
+          trade_count: r.trade_count,
+        })),
+      });
+      showNotification("success", "PDF 报告已下载");
+    } catch (e: unknown) {
+      showNotification("error", e instanceof Error ? e.message : "PDF 导出失败");
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (batchResults.length === 0) return;
+    try {
+      const avgReturn = sortedResults.reduce((s, r) => s + r.total_return, 0) / sortedResults.length;
+      const avgDD = sortedResults.reduce((s, r) => s + r.max_drawdown, 0) / sortedResults.length;
+      const avgSharpe = sortedResults.reduce((s, r) => s + r.sharpe_ratio, 0) / sortedResults.length;
+      const avgWinRate = sortedResults.reduce((s, r) => s + r.win_rate, 0) / sortedResults.length;
+      await exportReport({
+        type: "excel",
+        strategy_name: `批量回测对比 (${batchResults.length}标的)`,
+        start_date: "2023-01-01",
+        end_date: "2026-04-01",
+        total_return: avgReturn,
+        annual_return: avgReturn / 3,
+        max_drawdown: Math.abs(avgDD),
+        sharpe_ratio: avgSharpe,
+        win_rate: avgWinRate,
+        total_trades: sortedResults.reduce((s, r) => s + r.trade_count, 0),
+        batch_results: sortedResults.map(r => ({
+          symbol: r.symbol,
+          name: r.name,
+          total_return: r.total_return,
+          sharpe_ratio: r.sharpe_ratio,
+          max_drawdown: r.max_drawdown,
+          win_rate: r.win_rate,
+          trade_count: r.trade_count,
+        })),
+      });
+      showNotification("success", "Excel 报告已下载");
+    } catch (e: unknown) {
+      showNotification("error", e instanceof Error ? e.message : "Excel 导出失败");
+    }
+  };
+
+  const handleExportCSV = async () => {
+    if (batchResults.length === 0) return;
+    try {
+      await exportReport({
+        type: "csv",
+        strategy_name: `批量回测对比 (${batchResults.length}标的)`,
+        start_date: "2023-01-01",
+        end_date: "2026-04-01",
+        total_return: sortedResults.reduce((s, r) => s + r.total_return, 0) / sortedResults.length,
+        annual_return: sortedResults.reduce((s, r) => s + r.total_return, 0) / sortedResults.length / 3,
+        max_drawdown: Math.abs(sortedResults.reduce((s, r) => s + r.max_drawdown, 0) / sortedResults.length),
+        sharpe_ratio: sortedResults.reduce((s, r) => s + r.sharpe_ratio, 0) / sortedResults.length,
+        win_rate: sortedResults.reduce((s, r) => s + r.win_rate, 0) / sortedResults.length,
+        total_trades: sortedResults.reduce((s, r) => s + r.trade_count, 0),
+        batch_results: sortedResults.map(r => ({
+          symbol: r.symbol,
+          name: r.name,
+          total_return: r.total_return,
+          sharpe_ratio: r.sharpe_ratio,
+          max_drawdown: r.max_drawdown,
+          win_rate: r.win_rate,
+          trade_count: r.trade_count,
+        })),
+      });
+      showNotification("success", "CSV 已下载");
+    } catch (e: unknown) {
+      showNotification("error", e instanceof Error ? e.message : "CSV 导出失败");
     }
   };
 
@@ -524,6 +624,36 @@ export default function AnalysisPage() {
                   <span className="ml-auto text-xs text-text-muted">
                     {sortedResults.length} 个标的 · 点击表头排序
                   </span>
+                  {/* Export buttons */}
+                  <div className="flex items-center gap-1 ml-4">
+                    <button
+                      onClick={handleExportPDF}
+                      disabled={batchResults.length === 0}
+                      title="导出 PDF"
+                      className="flex items-center gap-1 px-2 py-1.5 bg-accent-primary/10 border border-accent-primary/30 text-accent-primary rounded-lg text-xs font-medium hover:bg-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      <FileText size={12} />
+                      PDF
+                    </button>
+                    <button
+                      onClick={handleExportExcel}
+                      disabled={batchResults.length === 0}
+                      title="导出 Excel"
+                      className="flex items-center gap-1 px-2 py-1.5 bg-accent-success/10 border border-accent-success/30 text-accent-success rounded-lg text-xs font-medium hover:bg-accent-success/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      <FileSpreadsheet size={12} />
+                      Excel
+                    </button>
+                    <button
+                      onClick={handleExportCSV}
+                      disabled={batchResults.length === 0}
+                      title="导出 CSV"
+                      className="flex items-center gap-1 px-2 py-1.5 bg-bg-tertiary border border-border-color text-text-secondary rounded-lg text-xs font-medium hover:bg-bg-tertiary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      <FileDown size={12} />
+                      CSV
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">

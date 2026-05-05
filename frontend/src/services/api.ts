@@ -352,6 +352,128 @@ export const explainBacktest = async (strategyName: string, results: object) => 
   };
 };
 
+export interface ExportReportOptions {
+  type: "pdf" | "excel" | "csv";
+  strategy_name?: string;
+  start_date?: string;
+  end_date?: string;
+  initial_cash?: number;
+  total_return: number;
+  annual_return: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
+  win_rate: number;
+  total_trades: number;
+  equity_curve?: Array<{ date: string; value: number }>;
+  monthly_returns?: Array<{ month: string; return_pct: number }>;
+  drawdown_curve?: Array<{ date: string; drawdown_pct: number }>;
+  trades?: Array<{
+    date: string;
+    symbol: string;
+    type: string;
+    price: number;
+    quantity: number;
+    pnl: number;
+  }>;
+  batch_results?: Array<{
+    symbol: string;
+    name: string;
+    total_return: number;
+    sharpe_ratio: number;
+    max_drawdown: number;
+    win_rate: number;
+    trade_count: number;
+  }>;
+}
+
+export const exportReport = async (options: ExportReportOptions): Promise<void> => {
+  const {
+    type,
+    strategy_name = "策略回测",
+    start_date = "2023-01-01",
+    end_date = "2026-04-01",
+    initial_cash = 1_000_000,
+    total_return,
+    annual_return,
+    max_drawdown,
+    sharpe_ratio,
+    win_rate,
+    total_trades,
+    equity_curve = [],
+    monthly_returns = [],
+    drawdown_curve = [],
+    trades = [],
+    batch_results,
+  } = options;
+
+  const payload = {
+    type,
+    strategy_name,
+    start_date,
+    end_date,
+    initial_cash,
+    total_return,
+    annual_return,
+    max_drawdown,
+    sharpe_ratio,
+    win_rate,
+    total_trades,
+    equity_curve,
+    monthly_returns,
+    drawdown_curve,
+    trades,
+    batch_results,
+  };
+
+  if (!isDemoMode) {
+    const res = await fetch(`/api/report/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ext = type === "excel" ? "xlsx" : type;
+    a.href = url;
+    a.download = `backtest_report_${new Date().toISOString().slice(0, 10)}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // Demo mode: generate client-side blob
+  if (type === "csv") {
+    const rows = [
+      ["Date", "Symbol", "Type", "Price", "Quantity", "P&L"],
+      ...trades.map(t => [t.date, t.symbol, t.type.toUpperCase(), t.price.toFixed(2), t.quantity, t.pnl.toFixed(2)]),
+      [],
+      ["Summary"],
+      ["Strategy", strategy_name],
+      ["Period", `${start_date} ~ ${end_date}`],
+      ["Total Return", `${total_return.toFixed(2)}%`],
+      ["Annual Return", `${annual_return.toFixed(2)}%`],
+      ["Max Drawdown", `${max_drawdown.toFixed(2)}%`],
+      ["Sharpe Ratio", sharpe_ratio.toFixed(2)],
+      ["Win Rate", `${win_rate.toFixed(1)}%`],
+      ["Total Trades", total_trades],
+    ];
+    const csvContent = rows.map(r => r.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backtest_trades_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // For PDF/Excel in demo mode, show a notification that backend is needed
+  throw new Error("PDF/Excel export requires backend mode. Please run the full application.");
+};
+
 // ============== Technical Analysis ==============
 
 export const technicalAnalysis = async (symbol: string, indicatorTypes: string[]): Promise<TechnicalAnalysis> => {

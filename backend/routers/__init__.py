@@ -10,3 +10,4 @@ from . import ai_priority
 from . import account
 from . import stock_pools
 from . import eastmoney
+from . import report_export

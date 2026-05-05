@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import os
 
 from database import init_db
-from routers import stock_selection, trading, backtest, analysis, models, ipo, data_sources, ai_priority, account, stock_pools, eastmoney, optimize, kline_data
+from routers import stock_selection, trading, backtest, analysis, models, ipo, data_sources, ai_priority, account, stock_pools, eastmoney, optimize, kline_data, report_export
 from config import settings
 
 
@@ -56,6 +56,7 @@ app.include_router(stock_pools.router)
 app.include_router(eastmoney.router)
 app.include_router(optimize.router)
 app.include_router(kline_data.router)
+app.include_router(report_export.router)
 
 
 @app.get("/api/health")
