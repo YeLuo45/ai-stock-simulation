@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../store'
-import { runBacktest, getBacktestResults, explainBacktest, runOptimization, type BacktestIndicator, type OptimizationResultDetail } from '../services/api'
+import { runBacktest, getBacktestResults, explainBacktest, runOptimization, saveBacktestTradesToHistory, type BacktestIndicator, type OptimizationResultDetail } from '../services/api'
 import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Trash2, Settings2, PieChart, Download } from 'lucide-react'
 import { 
   XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -87,6 +87,8 @@ export default function BacktestPage() {
         params: { indicators, optimizationMode, optimizationParams },
       })
       setResults(result)
+      // Save trades to trade history
+      await saveBacktestTradesToHistory(result, strategyName || '自定义策略')
       const historyData = await getBacktestResults()
       setHistory(historyData)
     } catch (err: any) {

@@ -161,7 +161,7 @@ export interface AIModelConfig {
   has_api_key?: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "strategy";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "strategy" | "history";
 
 // ============== IPO Evaluation ==============
 

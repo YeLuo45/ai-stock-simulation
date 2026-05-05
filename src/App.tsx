@@ -9,6 +9,7 @@ import AnalysisPage from './pages/AnalysisPage'
 import SettingsPage from './pages/SettingsPage'
 import IPOEvaluationPage from './pages/IPOEvaluationPage'
 import StrategyComparisonPage from './pages/StrategyComparisonPage'
+import HistoryPage from './pages/HistoryPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -42,6 +43,8 @@ function App() {
         return <IPOEvaluationPage />
       case 'strategy':
         return <StrategyComparisonPage />
+      case 'history':
+        return <HistoryPage />
       default:
         return <HomePage />
     }

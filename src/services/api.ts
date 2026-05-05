@@ -26,6 +26,12 @@ import {
   getModelConfigs as dbGetModelConfigsSync,
   saveModelConfig as dbSaveModelConfig,
   BacktestResultData,
+  saveTradeHistoryRecord,
+  getTradeHistoryRecords as dbGetTradeHistoryRecords,
+  deleteTradeHistoryRecord,
+  clearTradeHistory,
+  deleteBacktestRecord,
+  clearBacktestHistory,
 } from "./db";
 
 import {
@@ -271,6 +277,55 @@ export function getBacktestResults(limit = 20): Promise<BacktestResponse[]> {
     return results.map((r) => JSON.parse(r.result));
   })();
 }
+
+export async function getBacktestRecordById(id: number): Promise<BacktestResponse | null> {
+  const results = await dbGetBacktestResults(100);
+  const found = results.find((r) => r.id === id);
+  return found ? JSON.parse(found.result) : null;
+}
+
+export async function saveBacktestTradesToHistory(
+  result: BacktestResponse,
+  strategyName: string
+): Promise<void> {
+  if (!result.trades || result.trades.length === 0) return;
+
+  for (const trade of result.trades) {
+    await saveTradeHistoryRecord({
+      source: 'backtest',
+      symbol: trade.symbol,
+      name: trade.symbol,
+      trade_type: trade.type,
+      price: trade.price,
+      quantity: trade.quantity,
+      commission: 0,
+      total_cost: trade.amount,
+      profit: trade.profit,
+      timestamp: trade.date,
+      strategy_name: strategyName || result.strategy_name,
+    });
+  }
+}
+
+// ============== History API ==============
+
+export async function deleteBacktestRecordById(id: number): Promise<void> {
+  await deleteBacktestRecord(id);
+}
+
+export async function clearAllBacktestHistory(): Promise<void> {
+  await clearBacktestHistory();
+}
+
+export async function deleteTradeRecordById(id: number): Promise<void> {
+  await deleteTradeHistoryRecord(id);
+}
+
+export async function clearAllTradeHistory(): Promise<void> {
+  await clearTradeHistory();
+}
+
+export { dbGetTradeHistoryRecords as getTradeHistoryRecords };
 
 // ============== Analysis Helpers ==============
 

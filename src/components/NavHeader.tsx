@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { getPortfolio } from '../services/api'
 import { useState, useEffect } from 'react'
-import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, GitCompare } from 'lucide-react'
+import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, GitCompare, Clock } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page } from '../types'
 
@@ -12,6 +12,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: React.ReactNode }[] = [
   { key: 'strategy', label: '多策略', icon: <GitCompare size={18} /> },
   { key: 'trading', label: '交易', icon: <Wallet size={18} /> },
   { key: 'ipo', label: '新股评估', icon: <Star size={18} /> },
+  { key: 'history', label: '历史', icon: <Clock size={18} /> },
   { key: 'settings', label: '设置', icon: <Settings size={18} /> },
 ]
 

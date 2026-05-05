@@ -50,6 +50,22 @@ export interface BacktestResultData {
   created_at: string;
 }
 
+export interface TradeHistoryRecord {
+  id?: number;
+  source: 'backtest' | 'live';
+  symbol: string;
+  name: string;
+  trade_type: 'buy' | 'sell';
+  price: number;
+  quantity: number;
+  commission: number;
+  stamp_tax?: number;
+  total_cost: number;
+  profit?: number;
+  timestamp: string;
+  strategy_name?: string;
+}
+
 export interface ModelConfigData {
   id: number;
   model_name: string;
@@ -89,6 +105,15 @@ interface StockSimulationDB extends DBSchema {
     key: number;
     value: BacktestResultData;
     indexes: { "by-created": string };
+  };
+  trade_history: {
+    key: number;
+    value: TradeHistoryRecord;
+    indexes: {
+      "by-symbol": string;
+      "by-source": string;
+      "by-timestamp": string;
+    };
   };
   model_configs: {
     key: number;
@@ -134,6 +159,14 @@ export async function getDB(): Promise<IDBPDatabase<StockSimulationDB>> {
       if (!db.objectStoreNames.contains("backtest_results")) {
         const backtestStore = db.createObjectStore("backtest_results", { keyPath: "id" });
         backtestStore.createIndex("by-created", "created_at");
+      }
+
+      // Trade history store (unified backtest + live trades)
+      if (!db.objectStoreNames.contains("trade_history")) {
+        const tradeHistStore = db.createObjectStore("trade_history", { keyPath: "id" });
+        tradeHistStore.createIndex("by-symbol", "symbol");
+        tradeHistStore.createIndex("by-source", "source");
+        tradeHistStore.createIndex("by-timestamp", "timestamp");
       }
 
       // Model configs store
@@ -227,6 +260,65 @@ export async function getBacktestResults(limit: number = 20): Promise<BacktestRe
 export async function saveBacktestResult(result: BacktestResultData): Promise<void> {
   const db = await getDB();
   await db.put("backtest_results", result);
+}
+
+export async function deleteBacktestRecord(id: number): Promise<void> {
+  const db = await getDB();
+  await db.delete("backtest_results", id);
+}
+
+export async function clearBacktestHistory(): Promise<void> {
+  const db = await getDB();
+  await db.clear("backtest_results");
+}
+
+// ============== Trade History (Unified) Operations ==============
+
+export async function saveTradeHistoryRecord(record: TradeHistoryRecord): Promise<number> {
+  const db = await getDB();
+  return db.put("trade_history", record) as Promise<number>;
+}
+
+export async function getTradeHistoryRecords(filters?: {
+  symbol?: string;
+  startDate?: string;
+  endDate?: string;
+  source?: 'backtest' | 'live';
+  limit?: number;
+}): Promise<TradeHistoryRecord[]> {
+  const db = await getDB();
+  let records = await db.getAll("trade_history");
+
+  if (filters?.symbol) {
+    records = records.filter(r => r.symbol === filters.symbol);
+  }
+  if (filters?.source) {
+    records = records.filter(r => r.source === filters.source);
+  }
+  if (filters?.startDate) {
+    records = records.filter(r => r.timestamp >= filters.startDate!);
+  }
+  if (filters?.endDate) {
+    records = records.filter(r => r.timestamp <= filters.endDate!);
+  }
+
+  records.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  if (filters?.limit) {
+    records = records.slice(0, filters.limit);
+  }
+
+  return records;
+}
+
+export async function deleteTradeHistoryRecord(id: number): Promise<void> {
+  const db = await getDB();
+  await db.delete("trade_history", id);
+}
+
+export async function clearTradeHistory(): Promise<void> {
+  const db = await getDB();
+  await db.clear("trade_history");
 }
 
 // ============== Model Config Operations ==============
