@@ -326,3 +326,93 @@ class DataSourceResponse(BaseModel):
 
 class DataSourceUpdateRequest(BaseModel):
     enabled: bool
+
+
+# ============== Parameter Optimization ==============
+
+class ParameterRange(BaseModel):
+    min: float
+    max: float
+    step: float
+
+
+class OptimizeRequest(BaseModel):
+    strategy_name: str = "MA交叉策略"
+    symbols: List[str] = Field(default_factory=list, description="回测标的，不填则用默认")
+    start_date: str = "2023-01-01"
+    end_date: str = "2026-04-01"
+    initial_cash: float = 1_000_000.0
+    # 参数网格：每个参数有 min/max/step
+    ma_short_range: ParameterRange = Field(
+        default_factory=lambda: ParameterRange(min=3, max=20, step=1)
+    )
+    ma_long_range: ParameterRange = Field(
+        default_factory=lambda: ParameterRange(min=20, max=60, step=5)
+    )
+    stop_loss_range: ParameterRange = Field(
+        default_factory=lambda: ParameterRange(min=0.02, max=0.10, step=0.02)
+    )
+    take_profit_range: ParameterRange = Field(
+        default_factory=lambda: ParameterRange(min=0.05, max=0.25, step=0.05)
+    )
+    position_range: ParameterRange = Field(
+        default_factory=lambda: ParameterRange(min=0.1, max=1.0, step=0.1)
+    )
+
+
+class OptimizeCombination(BaseModel):
+    ma_short: float
+    ma_long: float
+    stop_loss: float
+    take_profit: float
+    position: float
+
+
+class OptimizeMetrics(BaseModel):
+    total_return: float
+    annual_return: float
+    max_drawdown: float
+    sharpe_ratio: float
+    win_rate: float
+    total_trades: int
+
+
+class OptimizeResultItem(BaseModel):
+    params: OptimizeCombination
+    metrics: OptimizeMetrics
+
+
+class HeatmapPoint(BaseModel):
+    ma_short: float
+    ma_long: float
+    total_return: float
+
+
+class ScatterPoint(BaseModel):
+    max_drawdown: float
+    total_return: float
+    ma_short: float
+    ma_long: float
+
+
+class OptimizeProgress(BaseModel):
+    batch_id: str
+    status: str  # running / completed / cancelled
+    total_combinations: int
+    completed_combinations: int
+    current_combo: Optional[OptimizeCombination] = None
+
+
+class OptimizeResponse(BaseModel):
+    batch_id: str
+    total_combinations: int
+
+
+class OptimizeResultsResponse(BaseModel):
+    batch_id: str
+    status: str
+    total_combinations: int
+    completed_combinations: int
+    top3: List[OptimizeResultItem]  # 按 total_return 降序
+    heatmap_data: List[HeatmapPoint]  # MA_short x MA_long -> return
+    scatter_data: List[ScatterPoint]  # max_drawdown vs total_return

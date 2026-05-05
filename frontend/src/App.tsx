@@ -9,6 +9,7 @@ import AnalysisPage from './pages/AnalysisPage'
 import SettingsPage from './pages/SettingsPage'
 import IPOEvaluationPage from './pages/IPOEvaluationPage'
 import StockPoolPage from './pages/StockPoolPage'
+import OptimizePage from './pages/OptimizePage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -40,6 +41,8 @@ function App() {
         return <SelectionPage />
       case 'backtest':
         return <BacktestPage />
+      case 'optimize':
+        return <OptimizePage />
       case 'trading':
         return <TradingPage />
       case 'analysis':

@@ -146,7 +146,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize";
 
 // ============== Stock Pool ==============
 
@@ -217,5 +217,84 @@ export interface DataSourceResponse {
 
 export interface AIModelPriorityResponse {
   priority: string[];
+}
+
+// ============== Parameter Optimization ==============
+
+export interface ParameterRange {
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface OptimizeRequest {
+  strategy_name?: string;
+  symbols?: string[];
+  start_date?: string;
+  end_date?: string;
+  initial_cash?: number;
+  ma_short_range: ParameterRange;
+  ma_long_range: ParameterRange;
+  stop_loss_range: ParameterRange;
+  take_profit_range: ParameterRange;
+  position_range: ParameterRange;
+}
+
+export interface OptimizeCombination {
+  ma_short: number;
+  ma_long: number;
+  stop_loss: number;
+  take_profit: number;
+  position: number;
+}
+
+export interface OptimizeMetrics {
+  total_return: number;
+  annual_return: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
+  win_rate: number;
+  total_trades: number;
+}
+
+export interface OptimizeResultItem {
+  params: OptimizeCombination;
+  metrics: OptimizeMetrics;
+}
+
+export interface HeatmapPoint {
+  ma_short: number;
+  ma_long: number;
+  total_return: number;
+}
+
+export interface ScatterPoint {
+  max_drawdown: number;
+  total_return: number;
+  ma_short: number;
+  ma_long: number;
+}
+
+export interface OptimizeResponse {
+  batch_id: string;
+  total_combinations: number;
+}
+
+export interface OptimizeProgress {
+  batch_id: string;
+  status: string;
+  total_combinations: number;
+  completed_combinations: number;
+  current_combo: OptimizeCombination | null;
+}
+
+export interface OptimizeResultsResponse {
+  batch_id: string;
+  status: string;
+  total_combinations: number;
+  completed_combinations: number;
+  top3: OptimizeResultItem[];
+  heatmap_data: HeatmapPoint[];
+  scatter_data: ScatterPoint[];
 }
 

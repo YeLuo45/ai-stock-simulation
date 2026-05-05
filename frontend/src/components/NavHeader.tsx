@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { getPortfolio } from '../services/api'
 import { useState, useEffect } from 'react'
-import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, Layers } from 'lucide-react'
+import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, Layers, Settings2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page } from '../types'
 
@@ -9,6 +9,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: React.ReactNode }[] = [
   { key: 'home', label: '首页', icon: <TrendingUp size={18} /> },
   { key: 'selection', label: 'AI选股', icon: <Bot size={18} /> },
   { key: 'backtest', label: '回测', icon: <BarChart2 size={18} /> },
+  { key: 'optimize', label: '参数优化', icon: <Settings2 size={18} /> },
   { key: 'stockpool', label: '股票池', icon: <Layers size={18} /> },
   { key: 'trading', label: '交易', icon: <Wallet size={18} /> },
   { key: 'ipo', label: '新股评估', icon: <Star size={18} /> },
