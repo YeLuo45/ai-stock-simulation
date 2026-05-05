@@ -374,7 +374,7 @@ export default function BacktestPage() {
           {/* K线图 */}
           {results.kline_data && results.kline_data.length > 0 && (
             <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
-              <KLineChart data={results.kline_data} symbol="600519" height={350} />
+              <KLineChart data={results.kline_data} symbol="600519" />
             </div>
           )}
 
