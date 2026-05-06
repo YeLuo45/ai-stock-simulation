@@ -45,7 +45,7 @@ import {
   macdTrendBacktest,
   quantStockSelection,
 } from "./indicators";
-import { fetchKlineData } from "./yahooFinance";
+import { fetchKlineData, searchSymbols } from "./yahooFinance";
 
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
 
@@ -72,6 +72,20 @@ export const searchStocks = async (keyword: string) => {
   if (!isDemoMode) {
     const res = await fetch(`/api/stocks/search?keyword=${encodeURIComponent(keyword)}`);
     return res.json();
+  }
+  // Demo mode: use Yahoo Finance search
+  try {
+    const results = await searchSymbols(keyword);
+    return results.map(r => ({
+      symbol: r.symbol,
+      name: r.name,
+      exchange: r.exchange,
+      price: 0,
+      change: 0,
+      changePercent: 0,
+    }));
+  } catch (e) {
+    console.warn('Yahoo Finance search failed, fallback to mock:', e);
   }
   await delay(300);
   return DEFAULT_STOCKS.filter(s =>
