@@ -218,6 +218,25 @@ npm run dev
 
 ---
 
+## P-20260506-031: E. 模拟交易竞赛（2026-05-06）
+
+### 新增功能
+- **ContestPage.tsx**: 模拟交易竞赛页面
+- **我的竞赛 Tab**: 已加入竞赛列表、排名战绩、战绩分享记录
+- **公开竞赛 Tab**: 全部/进行中/即将开始筛选，一键加入
+- **排行榜 Tab**: 实时排行（每30秒刷新）、Top3突出、排名变化
+- **创建/加入竞赛 Modal**: 竞赛名称/资金/截止日期等设置
+- **持仓分享**: 分享码生成、localStorage持久化、复制分享文本
+- **导航集成**: NavHeader 新增"竞赛"入口
+
+### 新增/修改文件
+- `frontend/src/pages/ContestPage.tsx` — 新页面
+- `frontend/src/App.tsx` — 路由注册
+- `frontend/src/components/NavHeader.tsx` — 导航项
+- `frontend/src/types/index.ts` — Page 类型扩展
+
+---
+
 ## 后续优化建议
 
 1. 添加 IPO 数据缓存机制
