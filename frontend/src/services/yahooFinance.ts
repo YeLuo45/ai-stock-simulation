@@ -1,0 +1,142 @@
+/**
+ * Yahoo Finance API adapter for real stock data
+ */
+
+const BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
+
+/**
+ * Normalize China stock code to Yahoo Finance format
+ */
+export function normalizeSymbol(code: string): string {
+  const c = code.trim().toUpperCase();
+  if (c.endsWith('.SS') || c.endsWith('.SZ') || c.endsWith('.HK') || c.endsWith('.KS') || c.endsWith('.T')) return c;
+  // A shares: 6-digit numbers
+  if (/^\d{6}$/.test(c)) {
+    const num = parseInt(c);
+    if (num >= 600000 && num < 605000) return `${c}.SS`;
+    if (num >= 688000) return `${c}.SS`;
+    if ((num >= 0 && num < 400000) || (num >= 300000 && num < 400000)) return `${c}.SZ`;
+  }
+  // HK: 4-5 digits
+  if (/^\d{4,5}$/.test(c)) return `${c}.HK`;
+  return c;
+}
+
+/**
+ * Fetch historical K-line data from Yahoo Finance
+ */
+export async function fetchKlineData(
+  symbol: string,
+  days = 120,
+  interval: '1d' | '1wk' | '1mo' = '1d'
+): Promise<{ date: string; open: number; high: number; low: number; close: number; volume: number }[]> {
+  const normalized = normalizeSymbol(symbol);
+  const endDate = Math.floor(Date.now() / 1000);
+  const startDate = endDate - days * 24 * 60 * 60;
+
+  const url = `${BASE_URL}/${normalized}?period1=${startDate}&period2=${endDate}&interval=${interval}&events=history`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (data.chart?.error) {
+    throw new Error(data.chart.error.description || 'Unknown error');
+  }
+
+  const result = data.chart?.result?.[0];
+  if (!result) throw new Error('No data returned');
+
+  const timestamps = result.timestamp as number[];
+  const quotes = result.indicators?.quote?.[0];
+  if (!timestamps || !quotes) throw new Error('Invalid data format');
+
+  const ohlcv: { date: string; open: number; high: number; low: number; close: number; volume: number }[] = [];
+
+  for (let i = 0; i < timestamps.length; i++) {
+    const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+    ohlcv.push({
+      date,
+      open: quotes.open?.[i] ?? quotes.close?.[i] ?? 0,
+      high: quotes.high?.[i] ?? quotes.close?.[i] ?? 0,
+      low: quotes.low?.[i] ?? quotes.close?.[i] ?? 0,
+      close: quotes.close?.[i] ?? 0,
+      volume: quotes.volume?.[i] ?? 0,
+    });
+  }
+
+  return ohlcv;
+}
+
+/**
+ * Search stock symbols
+ */
+export async function searchSymbols(query: string): Promise<{ symbol: string; name: string; exchange: string }[]> {
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const data = await response.json();
+  return (data.quotes || []).map((q: { symbol: string; shortname?: string; longname?: string; exchange: string }) => ({
+    symbol: q.symbol,
+    name: q.longname || q.shortname || q.symbol,
+    exchange: q.exchange || 'UNKNOWN',
+  }));
+}
+
+/**
+ * Get realtime quote
+ */
+export async function getRealtimeQuote(symbol: string): Promise<{
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  high: number;
+  low: number;
+  open: number;
+  previousClose: number;
+}> {
+  const normalized = normalizeSymbol(symbol);
+  const url = `${BASE_URL}/${normalized}?interval=1d&range=1d`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const data = await response.json();
+  const result = data.chart?.result?.[0];
+  if (!result) throw new Error('No data');
+
+  const meta = result.meta;
+  const quotes = result.indicators?.quote?.[0];
+
+  return {
+    price: meta.regularMarketPrice || 0,
+    change: meta.regularMarketPrice - (meta.previousClose || meta.chartPreviousClose || 0),
+    changePercent: ((meta.regularMarketPrice - (meta.previousClose || 0)) / (meta.previousClose || 1)) * 100,
+    volume: meta.regularMarketVolume || 0,
+    high: quotes?.high?.[quotes.high.length - 1] || meta.regularMarketDayHigh || 0,
+    low: quotes?.low?.[quotes.low.length - 1] || meta.regularMarketDayLow || 0,
+    open: quotes?.open?.[quotes.open.length - 1] || meta.regularMarketOpen || 0,
+    previousClose: meta.chartPreviousClose || meta.previousClose || 0,
+  };
+}

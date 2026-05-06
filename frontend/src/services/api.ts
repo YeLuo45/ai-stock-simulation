@@ -45,6 +45,7 @@ import {
   macdTrendBacktest,
   quantStockSelection,
 } from "./indicators";
+import { fetchKlineData } from "./yahooFinance";
 
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
 
@@ -555,8 +556,29 @@ export const getKlineData = async (symbol: string, options: GetKlineOptions = {}
     return res.json();
   }
 
-  // Demo mode: generate mock data
+  // Demo mode: try real data first, fallback to mock
   await delay(300);
+  const isRealCode = /^\d{6}$/.test(symbol) || symbol.includes('.');
+  if (isRealCode) {
+    try {
+      const history = await fetchKlineData(symbol, 120);
+      return {
+        data: history.map((h) => ({
+          date: h.date,
+          open: h.open,
+          close: h.close,
+          high: h.high,
+          low: h.low,
+          volume: h.volume,
+        })),
+        count: history.length,
+        from_cache: false,
+        latest_date: history[history.length - 1]?.date,
+      };
+    } catch (e) {
+      console.warn('Yahoo Finance fetch failed, using mock data:', e);
+    }
+  }
   const stock = findStock(symbol);
   const history = generatePriceHistory(stock.price, 120);
   return {
