@@ -157,6 +157,30 @@ npm run dev
 
 ---
 
+## P-20260506-028: B. AI策略助手（2026-05-06）
+
+### 新增功能
+- **StrategyBuilderPage.tsx**: 新建策略 / 我的策略 Tab 页面
+- **自然语言生成**: 输入策略描述，AI 解析生成策略条件树
+- **AI 自动补全**: 输入时 debounce 500ms 触发关键词建议（MACD/RSI/KDJ/BOLL/PE/PB/ROE等指标）
+- **策略预览**: 买入/卖出条件可视化展示（绿色/红色标签）
+- **我的策略**: localStorage 持久化，策略卡片列表（编辑/删除/复制）
+- **导航集成**: NavHeader 新增"AI策略"入口
+
+### 新增/修改文件
+- `frontend/src/pages/StrategyBuilderPage.tsx` — 新页面
+- `frontend/src/App.tsx` — 路由注册
+- `frontend/src/components/NavHeader.tsx` — 导航项
+- `frontend/src/types/index.ts` — Page 类型扩展
+- `backend/routers/strategy.py` — `POST /api/strategy/nl-generate`, `POST /api/strategy/autocomplete`
+- `backend/main.py` — router 注册
+
+### API
+- `POST /api/strategy/nl-generate`: 自然语言 → 策略配置 + 指标列表
+- `POST /api/strategy/autocomplete`: partial → 建议列表
+
+---
+
 ## 后续优化建议
 
 1. 添加 IPO 数据缓存机制
