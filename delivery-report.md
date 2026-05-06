@@ -200,6 +200,24 @@ npm run dev
 
 ---
 
+## P-20260506-030: D. 资金流向分析（2026-05-06）
+
+### 新增功能
+- **CapitalFlowPage.tsx**: 资金流向分析面板，Tab 切换
+- **板块 Tab**: 行业板块排行 + 概念板块排行 + 横向柱状图
+- **个股 Tab**: 分时资金流向图（流入/流出面积图 + 净流入走势）
+- **Mock 数据**: 每10秒刷新，支持手动刷新
+- **股票选择器**: 个股视图支持切换不同股票
+- **导航集成**: NavHeader 新增"资金流向"菜单项
+
+### 新增/修改文件
+- `frontend/src/pages/CapitalFlowPage.tsx` — 新页面
+- `frontend/src/App.tsx` — 路由注册
+- `frontend/src/components/NavHeader.tsx` — 导航项
+- `frontend/src/types/index.ts` — Page 类型扩展
+
+---
+
 ## 后续优化建议
 
 1. 添加 IPO 数据缓存机制
