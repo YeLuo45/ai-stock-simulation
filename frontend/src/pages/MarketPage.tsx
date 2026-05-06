@@ -1,56 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Star, TrendingUp, TrendingDown, RefreshCw, Plus, X } from 'lucide-react'
+import { Star, TrendingUp, TrendingDown, Plus, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { StockInfo } from '../types'
+import { getRealtimeQuote } from '../services/yahooFinance'
+import { useStore } from '../store'
 
-// Mock WebSocket for real-time data simulation
-class MockStockWebSocket {
-  private interval: ReturnType<typeof setInterval> | null = null
-  private callbacks: Set<(stock: StockInfo) => void> = new Set()
-  private stocks: StockInfo[] = []
-
-  constructor(stocks: StockInfo[]) {
-    this.stocks = stocks.map(s => ({ ...s }))
-  }
-
-  subscribe(callback: (stock: StockInfo) => void) {
-    this.callbacks.add(callback)
-    if (!this.interval) {
-      this.startMockStream()
-    }
-    return () => {
-      this.callbacks.delete(callback)
-      if (this.callbacks.size === 0 && this.interval) {
-        clearInterval(this.interval)
-        this.interval = null
-      }
-    }
-  }
-
-  private startMockStream() {
-    this.interval = setInterval(() => {
-      // Randomly update 1-3 stocks
-      const numUpdates = Math.floor(Math.random() * 3) + 1
-      for (let i = 0; i < numUpdates; i++) {
-        const idx = Math.floor(Math.random() * this.stocks.length)
-        const stock = this.stocks[idx]
-        // Simulate price change: -2% to +2%
-        const changePct = (Math.random() - 0.5) * 4
-        const newPrice = stock.price * (1 + changePct / 100)
-        stock.price = Math.round(newPrice * 100) / 100
-        stock.change_pct = Math.round((stock.change_pct + (Math.random() - 0.5) * 0.5) * 100) / 100
-        stock.volume += Math.floor(Math.random() * 100000)
-        this.callbacks.forEach(cb => cb({ ...stock }))
-      }
-    }, 2000)
-  }
-
-  updateStocks(stocks: StockInfo[]) {
-    this.stocks = stocks.map(s => ({ ...s }))
-  }
-}
-
-// Default market stocks for different tabs
+// Default market stocks for add modal search
 const MARKET_STOCKS: StockInfo[] = [
   { symbol: '600519', name: '贵州茅台', market: '上海', price: 1688.00, change_pct: -0.45, volume: 2345678 },
   { symbol: '000001', name: '平安银行', market: '深圳', price: 12.35, change_pct: 1.23, volume: 45678900 },
@@ -60,7 +15,6 @@ const MARKET_STOCKS: StockInfo[] = [
   { symbol: '688001', name: '华兴源创', market: '科创板', price: 28.45, change_pct: 3.45, volume: 1234567 },
   { symbol: '300750', name: '宁德时代', market: '创业板', price: 189.50, change_pct: 1.78, volume: 9876543 },
   { symbol: '601318', name: '中国平安', market: '上海', price: 45.23, change_pct: 0.56, volume: 8765432 },
-  { symbol: '600036', name: '招商银行', market: '上海', price: 35.67, change_pct: 0.89, volume: 12345678 },
   { symbol: '000333', name: '美的集团', market: '深圳', price: 62.80, change_pct: -0.78, volume: 6543210 },
   { symbol: '601888', name: '中国中免', market: '上海', price: 78.50, change_pct: 1.45, volume: 3456789 },
   { symbol: '300015', name: '爱尔眼科', market: '创业板', price: 28.90, change_pct: -2.15, volume: 4321567 },
@@ -82,7 +36,6 @@ function getStoredStocks(): StockInfo[] {
   } catch {
     // ignore
   }
-  // Default follow list
   return [
     { symbol: '600519', name: '贵州茅台', market: '上海', price: 1688.00, change_pct: -0.45, volume: 2345678 },
     { symbol: '000001', name: '平安银行', market: '深圳', price: 12.35, change_pct: 1.23, volume: 45678900 },
@@ -95,68 +48,118 @@ function saveStoredStocks(stocks: StockInfo[]) {
 }
 
 export default function MarketPage() {
+  const { selectedStocks: storeSelectedStocks } = useStore()
   const [activeTab, setActiveTab] = useState<TabType>('follow')
   const [followStocks, setFollowStocks] = useState<StockInfo[]>(getStoredStocks)
-  const [marketStocks, setMarketStocks] = useState<StockInfo[]>(MARKET_STOCKS)
-  const [wsRef] = useState(() => new MockStockWebSocket(MARKET_STOCKS))
-  const [updatedSymbols, setUpdatedSymbols] = useState<Set<string>>(new Set())
+  const [marketStocks] = useState<StockInfo[]>(MARKET_STOCKS)
   const [showAddModal, setShowAddModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Real-time data states
+  const [stockList, setStockList] = useState<any[]>([])
+  const [, setLoading] = useState(true)
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [connected, setConnected] = useState(false)
+
+  // Default stocks fallback
+  const defaultStocks = [
+    { symbol: '600519', name: '贵州茅台' },
+    { symbol: '000001', name: '平安银行' },
+    { symbol: '000002', name: '万科A' },
+    { symbol: '600036', name: '招商银行' },
+    { symbol: '300750', name: '宁德时代' },
+    { symbol: '601318', name: '中国平安' },
+    { symbol: '000333', name: '美的集团' },
+    { symbol: '002594', name: '比亚迪' },
+  ]
+
+  // Fetch quotes from Yahoo Finance
+  const fetchQuotes = useCallback(async () => {
+    const stocksToFetch = storeSelectedStocks.length > 0
+      ? storeSelectedStocks.map(s => ({ symbol: s.symbol, name: s.name }))
+      : defaultStocks;
+
+    try {
+      const updates = await Promise.allSettled(
+        stocksToFetch.map(async (s) => {
+          const quote = await getRealtimeQuote(s.symbol);
+          return {
+            symbol: s.symbol,
+            name: s.name,
+            price: quote.price,
+            change: quote.change,
+            change_pct: quote.changePercent,
+            volume: quote.volume,
+          };
+        })
+      );
+
+      const newStocks = updates
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map(r => r.value);
+
+      if (newStocks.length > 0) {
+        setStockList(newStocks);
+        setLastUpdate(new Date());
+        setConnected(true);
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to fetch quotes:', err);
+      setConnected(false);
+      setLoading(false);
+    }
+  }, [storeSelectedStocks]);
 
   // Save follow stocks to localStorage
   useEffect(() => {
     saveStoredStocks(followStocks)
   }, [followStocks])
 
-  // WebSocket mock for real-time updates
+  // Real-time data polling
   useEffect(() => {
-    const unsubscribe = wsRef.subscribe((updatedStock) => {
-      setMarketStocks(prev => prev.map(s => 
-        s.symbol === updatedStock.symbol ? updatedStock : s
-      ))
-      setFollowStocks(prev => prev.map(s =>
-        s.symbol === updatedStock.symbol ? updatedStock : s
-      ))
-      // Flash animation
-      setUpdatedSymbols(prev => new Set(prev).add(updatedStock.symbol))
-      setTimeout(() => {
-        setUpdatedSymbols(prev => {
-          const next = new Set(prev)
-          next.delete(updatedStock.symbol)
-          return next
-        })
-      }, 500)
-    })
-    return unsubscribe
-  }, [wsRef])
+    fetchQuotes();
+    const interval = setInterval(fetchQuotes, 5000); // 每5秒刷新
+    return () => clearInterval(interval);
+  }, [fetchQuotes]);
 
-  // Update WS with latest follow stocks
+  // Update follow stocks from stockList
   useEffect(() => {
-    wsRef.updateStocks([...marketStocks, ...followStocks])
-  }, [followStocks, marketStocks, wsRef])
+    if (stockList.length > 0 && activeTab === 'follow') {
+      setFollowStocks(prev => {
+        const updated = prev.map(fs => {
+          const real = stockList.find(s => s.symbol === fs.symbol);
+          return real ? { ...fs, price: real.price, change_pct: real.change_pct, volume: real.volume } : fs;
+        });
+        // Add new stocks from storeSelectedStocks that aren't in prev
+        storeSelectedStocks.forEach(ss => {
+          if (!updated.find(u => u.symbol === ss.symbol)) {
+            const real = stockList.find(s => s.symbol === ss.symbol);
+            if (real) updated.push(real);
+          }
+        });
+        return updated;
+      });
+    }
+  }, [stockList, activeTab, storeSelectedStocks]);
 
   const getTabStocks = useCallback((): StockInfo[] => {
-    const allStocks = [...marketStocks]
-    // Merge follow stocks that might not be in market list
-    followStocks.forEach(fs => {
-      if (!allStocks.find(s => s.symbol === fs.symbol)) {
-        allStocks.push(fs)
-      }
-    })
-
+    if (activeTab === 'follow') {
+      return followStocks;
+    }
+    // For gainers/losers/volume, use stockList if available, otherwise marketStocks
+    const source = stockList.length > 0 ? stockList : marketStocks;
     switch (activeTab) {
-      case 'follow':
-        return followStocks
       case 'gainers':
-        return [...allStocks].sort((a, b) => b.change_pct - a.change_pct).slice(0, 20)
+        return [...source].sort((a, b) => b.change_pct - a.change_pct).slice(0, 20)
       case 'losers':
-        return [...allStocks].sort((a, b) => a.change_pct - b.change_pct).slice(0, 20)
+        return [...source].sort((a, b) => a.change_pct - b.change_pct).slice(0, 20)
       case 'volume':
-        return [...allStocks].sort((a, b) => b.volume - a.volume).slice(0, 20)
+        return [...source].sort((a, b) => b.volume - a.volume).slice(0, 20)
       default:
         return followStocks
     }
-  }, [activeTab, followStocks, marketStocks])
+  }, [activeTab, followStocks, marketStocks, stockList]);
 
   const handleAddToFollow = (stock: StockInfo) => {
     if (!followStocks.find(s => s.symbol === stock.symbol)) {
@@ -256,10 +259,7 @@ export default function MarketPage() {
                 getTabStocks().map((stock) => (
                   <tr
                     key={stock.symbol}
-                    className={clsx(
-                      'border-b border-border-color/50 hover:bg-bg-tertiary/50 transition-colors',
-                      updatedSymbols.has(stock.symbol) && 'bg-accent-primary/10'
-                    )}
+                    className="border-b border-border-color/50 hover:bg-bg-tertiary/50 transition-colors"
                   >
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
@@ -317,9 +317,9 @@ export default function MarketPage() {
       </div>
 
       {/* Real-time indicator */}
-      <div className="flex items-center gap-2 text-text-muted text-xs">
-        <RefreshCw size={12} className="animate-spin" />
-        <span>模拟实时数据，每2秒更新</span>
+      <div className="flex items-center gap-2 text-xs text-text-muted">
+        <span className={`w-2 h-2 rounded-full ${connected ? 'bg-accent-success' : 'bg-accent-danger'}`} />
+        {connected ? `实时行情 · ${lastUpdate?.toLocaleTimeString() ?? ''}` : '连接失败'}
       </div>
 
       {/* Add stock modal */}
