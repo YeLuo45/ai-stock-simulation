@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
-import { resetPortfolio, searchStocks } from "../services/api";
+import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } from "../services/api";
 import type { StockInfo } from "../types";
 import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import clsx from "clsx";
@@ -28,17 +28,8 @@ export default function TradingPage() {
 
   const loadPortfolio = async () => {
     try {
-      // Fetch account info and positions in parallel
-      const [accountRes, positionsRes] = await Promise.all([
-        fetch(`/api/trading/account`),
-        fetch(`/api/trading/positions`)
-      ]);
-      const account = await accountRes.json();
-      const positionsData = await positionsRes.json();
-      setPortfolio({
-        ...account,
-        positions: positionsData.positions || []
-      });
+      const data = await getPortfolio();
+      setPortfolio(data);
     } catch (e) {
       console.error(e);
     }
@@ -46,9 +37,12 @@ export default function TradingPage() {
 
   const loadTrades = async () => {
     try {
-      const res = await fetch(`/api/trading/trades?page=1&page_size=100`);
-      const data = await res.json();
-      setTrades(data.trades || []);
+      const data = await getTrades(100);
+      // Handle both array (demo/backend trading.py) and object with trades property (account.py)
+      const trades = Array.isArray(data)
+        ? data
+        : (data as any)?.trades || [];
+      setTrades(trades);
     } catch (e) {
       console.error(e);
     }
@@ -79,22 +73,12 @@ export default function TradingPage() {
     if (!symbol || !quantity) return;
     setLoading(true);
     try {
-      if (tradeType === "buy") {
-        const res = await fetch(`/api/trading/positions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ symbol, name: name || symbol, quantity: parseInt(quantity) }),
-        });
-        if (!res.ok) throw new Error("买入失败");
-      } else {
-        // Find position id from portfolio
-        const pos = portfolio?.positions?.find((p: any) => p.symbol === symbol);
-        if (!pos) throw new Error("未找到持仓");
-        const res = await fetch(`/api/trading/positions/${pos.id}?quantity=${parseInt(quantity)}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) throw new Error("卖出失败");
-      }
+      await executeTrade({
+        symbol,
+        name: name || symbol,
+        trade_type: tradeType,
+        quantity: parseInt(quantity),
+      });
       await loadPortfolio();
       await loadTrades();
       setSymbol(""); setName(""); setQuantity("");

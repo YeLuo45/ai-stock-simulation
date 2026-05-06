@@ -138,8 +138,17 @@ export const getMultipleQuotes = async (symbols: string[]) => {
 
 export const getPortfolio = async (): Promise<Portfolio> => {
   if (!isDemoMode) {
-    const res = await fetch(`/api/trading/account`);
-    return res.json();
+    // Fetch account info and positions in parallel, then merge
+    const [accountRes, positionsRes] = await Promise.all([
+      fetch(`/api/trading/account`),
+      fetch(`/api/trading/positions`),
+    ]);
+    const account = await accountRes.json();
+    const positionsData = await positionsRes.json();
+    return {
+      ...account,
+      positions: positionsData.positions || [],
+    };
   }
   await delay(200);
   return s_recalcPortfolio();
