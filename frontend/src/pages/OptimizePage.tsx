@@ -20,7 +20,7 @@ import { Settings2, Play, X, TrendingUp, TrendingDown, BarChart2, Target, Rotate
 import clsx from 'clsx'
 
 export default function OptimizePage() {
-  const { showNotification } = useStore()
+  const { showNotification, selectedStocks } = useStore()
 
   // Grid config state
   const [maShortRange, setMaShortRange] = useState<ParameterRange>({ min: 3, max: 20, step: 1 })
@@ -31,6 +31,7 @@ export default function OptimizePage() {
 
   // Execution state
   const [running, setRunning] = useState(false)
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('000001')
   const [batchId, setBatchId] = useState<string | null>(null)
   const [progress, setProgress] = useState<OptimizeProgress | null>(null)
   const [results, setResults] = useState<OptimizeResultsResponse | null>(null)
@@ -59,7 +60,7 @@ export default function OptimizePage() {
   const handleStart = async () => {
     const req: OptimizeRequest = {
       strategy_name: 'MA交叉策略',
-      symbol: '000001',  // 默认用平安银行真实K线
+      symbol: selectedSymbol,
       ma_short_range: maShortRange,
       ma_long_range: maLongRange,
       stop_loss_range: stopLossRange,
@@ -107,14 +108,45 @@ export default function OptimizePage() {
           <Settings2 size={22} className="text-accent-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">策略参数优化</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">策略参数优化</h1>
+            {selectedStocks.length === 0 && (
+              <span className="text-xs text-text-muted">请从【智能选股】添加自选股，或使用默认股票</span>
+            )}
+            {selectedStocks.length > 0 && (
+              <span className="text-xs text-accent-primary">已选{selectedStocks.length}只股票</span>
+            )}
+          </div>
           <p className="text-text-muted text-sm">网格搜索最优参数组合</p>
         </div>
       </div>
 
-      {/* Parameter Grid Config */}
-      <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
-        <h3 className="font-semibold mb-4">参数网格配置</h3>
+        {/* Stock Selector */}
+        <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <select
+              value={selectedSymbol}
+              onChange={(e) => setSelectedSymbol(e.target.value)}
+              className="px-3 py-1.5 bg-bg-tertiary border border-border-color rounded-lg text-sm focus:outline-none focus:border-accent-primary"
+            >
+              {selectedStocks.length > 0 ? (
+                selectedStocks.map((s) => (
+                  <option key={s.symbol} value={s.symbol}>
+                    {s.symbol} - {s.name}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="000001">000001 - 平安银行</option>
+                  <option value="000002">000002 - 万科A</option>
+                  <option value="300750">300750 - 宁德时代</option>
+                  <option value="600519">600519 - 贵州茅台</option>
+                  <option value="601318">601318 - 中国平安</option>
+                </>
+              )}
+            </select>
+          </div>
+          <h3 className="font-semibold mb-4">参数网格配置</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <ParamRangeField
             label="MA Short"
