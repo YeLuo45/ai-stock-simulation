@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { runBacktest, getBacktestResults, explainBacktest } from '../services/api'
-import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap } from 'lucide-react'
+import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Download } from 'lucide-react'
+import { toCSV, downloadCSV } from '../utils/export'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
 import type { BacktestResponse } from '../types'
@@ -45,6 +46,42 @@ export default function BacktestPage() {
     } catch (err) {
       showNotification('error', '解读失败')
     }
+  }
+
+  const handleExportEquityCSV = () => {
+    if (!results) return
+    const data = results.equity_curve.map((p: { date: string; value: number }) => ({
+      日期: p.date,
+      账户价值: p.value.toFixed(2),
+    }))
+    const csv = toCSV(data, [
+      { key: '日期' as any, header: '日期' },
+      { key: '账户价值' as any, header: '账户价值' },
+    ])
+    downloadCSV(csv, `equity_${Date.now()}.csv`)
+  }
+
+  const handleExportTradesCSV = () => {
+    if (!results) return
+    const data = (results as any).trades?.map((t: any) => ({
+      日期: t.date || '',
+      股票: t.symbol || t.stock_code || '',
+      股票名称: t.name || '',
+      操作: t.type === 'buy' ? '买入' : '卖出',
+      价格: t.price?.toFixed(2) || '',
+      数量: t.quantity || '',
+      金额: t.price && t.quantity ? (t.price * t.quantity).toFixed(2) : '',
+    })) || []
+    const csv = toCSV(data, [
+      { key: '日期' as any, header: '日期' },
+      { key: '股票' as any, header: '股票代码' },
+      { key: '股票名称' as any, header: '股票名称' },
+      { key: '操作' as any, header: '操作' },
+      { key: '价格' as any, header: '价格' },
+      { key: '数量' as any, header: '数量' },
+      { key: '金额' as any, header: '金额' },
+    ])
+    downloadCSV(csv, `trades_${Date.now()}.csv`)
   }
 
   return (
@@ -158,12 +195,30 @@ export default function BacktestPage() {
           <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">资金曲线</h3>
-              <button
-                onClick={handleExplain}
-                className="text-sm text-accent-primary hover:underline"
-              >
-                AI解读
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportEquityCSV}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-accent-primary text-bg-primary rounded-lg text-xs hover:bg-accent-primary/90 transition-colors"
+                  title="导出资金曲线CSV"
+                >
+                  <Download size={12} />
+                  资金曲线
+                </button>
+                <button
+                  onClick={handleExportTradesCSV}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-accent-secondary text-bg-primary rounded-lg text-xs hover:bg-accent-secondary/90 transition-colors"
+                  title="导出交易记录CSV"
+                >
+                  <Download size={12} />
+                  交易记录
+                </button>
+                <button
+                  onClick={handleExplain}
+                  className="text-sm text-accent-primary hover:underline"
+                >
+                  AI解读
+                </button>
+              </div>
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
