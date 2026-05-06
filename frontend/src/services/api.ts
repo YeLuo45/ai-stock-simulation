@@ -42,6 +42,7 @@ import {
   trendFollowingBacktest,
   rsiBacktest,
   valueInvestingBacktest,
+  macdTrendBacktest,
   quantStockSelection,
 } from "./indicators";
 
@@ -254,6 +255,7 @@ const STRATEGY_MAP: Record<string, (history: Parameters<typeof meanReversionBack
   "趋势追踪策略": trendFollowingBacktest as any,
   "RSI反转策略": rsiBacktest as any,
   "价值投资策略": valueInvestingBacktest as any,
+  "MACD趋势策略": macdTrendBacktest as any,
 };
 
 export const runBacktest = async (req: BacktestRequest): Promise<BacktestResponse> => {
@@ -810,6 +812,33 @@ export const updateAIModelPriority = async (priority: string[]): Promise<{ messa
 
 // ============== Parameter Optimization ==============
 
+// In-memory store for demo-mode optimization state
+const optimState = new Map<string, {
+  req: OptimizeRequest;
+  combos: Array<{ ma_short: number; ma_long: number; stop_loss: number; take_profit: number; position: number }>;
+  completed: number;
+  results: OptimizeResultItem[];
+  cancelled: boolean;
+}>();
+
+function generateCombinations(req: OptimizeRequest) {
+  const combos: Array<{ ma_short: number; ma_long: number; stop_loss: number; take_profit: number; position: number }> = [];
+  for (let ms = req.ma_short_range.min; ms <= req.ma_short_range.max + 1e-9; ms += req.ma_short_range.step) {
+    for (let ml = req.ma_long_range.min; ml <= req.ma_long_range.max + 1e-9; ml += req.ma_long_range.step) {
+      for (let sl = req.stop_loss_range.min; sl <= req.stop_loss_range.max + 1e-9; sl += req.stop_loss_range.step) {
+        for (let tp = req.take_profit_range.min; tp <= req.take_profit_range.max + 1e-9; tp += req.take_profit_range.step) {
+          for (let pos = req.position_range.min; pos <= req.position_range.max + 1e-9; pos += req.position_range.step) {
+            if (ms < ml) {
+              combos.push({ ma_short: Math.round(ms * 100) / 100, ma_long: Math.round(ml * 100) / 100, stop_loss: Math.round(sl * 1000) / 1000, take_profit: Math.round(tp * 1000) / 1000, position: Math.round(pos * 100) / 100 });
+            }
+          }
+        }
+      }
+    }
+  }
+  return combos;
+}
+
 export const startOptimization = async (req: OptimizeRequest): Promise<OptimizeResponse> => {
   if (!isDemoMode) {
     const res = await fetch(`/api/backtest/optimize`, {
@@ -819,15 +848,11 @@ export const startOptimization = async (req: OptimizeRequest): Promise<OptimizeR
     });
     return res.json();
   }
-  // Demo mode: simulate start
-  await delay(300);
-  const ma_short_count = Math.ceil((req.ma_short_range.max - req.ma_short_range.min) / req.ma_short_range.step) + 1;
-  const ma_long_count = Math.ceil((req.ma_long_range.max - req.ma_long_range.min) / req.ma_long_range.step) + 1;
-  const sl_count = Math.ceil((req.stop_loss_range.max - req.stop_loss_range.min) / req.stop_loss_range.step) + 1;
-  const tp_count = Math.ceil((req.take_profit_range.max - req.take_profit_range.min) / req.take_profit_range.step) + 1;
-  const pos_count = Math.ceil((req.position_range.max - req.position_range.min) / req.position_range.step) + 1;
-  const total = ma_short_count * ma_long_count * sl_count * tp_count * pos_count;
-  return { batch_id: `demo-${Date.now()}`, total_combinations: total };
+  await delay(100);
+  const batchId = `opt-${Date.now()}`;
+  const combos = generateCombinations(req);
+  optimState.set(batchId, { req, combos, completed: 0, results: [], cancelled: false });
+  return { batch_id: batchId, total_combinations: combos.length };
 };
 
 export const getOptimizationProgress = async (batchId: string): Promise<OptimizeProgress> => {
@@ -835,13 +860,52 @@ export const getOptimizationProgress = async (batchId: string): Promise<Optimize
     const res = await fetch(`/api/backtest/optimize/${batchId}/progress`);
     return res.json();
   }
-  await delay(200);
+
+  const state = optimState.get(batchId);
+  if (!state) {
+    return { batch_id: batchId, status: "completed", total_combinations: 0, completed_combinations: 0, current_combo: null };
+  }
+
+  const state2 = optimState.get(batchId)!;
+  const SYMBOLS = ["平安银行", "万科A", "宁德时代"];
+  const basePrice = findStock(SYMBOLS[0]).price;
+
+  // Process combos in batches of 3 for faster demo
+  const BATCH = 3;
+  for (let i = 0; i < BATCH && state2.completed < state2.combos.length && !state2.cancelled; i++) {
+    const combo = state2.combos[state2.completed];
+    const history = generatePriceHistory(basePrice, 252);
+
+    // Run the MA cross strategy with these parameters (trendFollowingBacktest uses ma_short/ma_long)
+    const result = trendFollowingBacktest(history, 1_000_000, {
+      ma_short: combo.ma_short,
+      ma_long: combo.ma_long,
+    });
+
+    const item: OptimizeResultItem = {
+      params: combo,
+      metrics: {
+        total_return: result.total_return,
+        annual_return: result.annual_return,
+        max_drawdown: result.max_drawdown,
+        sharpe_ratio: result.sharpe_ratio,
+        win_rate: result.win_rate || 0,
+        total_trades: result.total_trades,
+      },
+    };
+    state2.results.push(item);
+    state2.completed++;
+  }
+
+  const status = state2.cancelled ? "cancelled" : (state2.completed >= state2.combos.length ? "completed" : "running");
+  const currentCombo = state2.completed < state2.combos.length ? state2.combos[state2.completed] : null;
+
   return {
     batch_id: batchId,
-    status: "running",
-    total_combinations: 100,
-    completed_combinations: Math.floor(Math.random() * 100),
-    current_combo: { ma_short: 5, ma_long: 30, stop_loss: 0.05, take_profit: 0.15, position: 0.5 },
+    status,
+    total_combinations: state2.combos.length,
+    completed_combinations: state2.completed,
+    current_combo: currentCombo,
   };
 };
 
@@ -850,32 +914,38 @@ export const getOptimizationResults = async (batchId: string): Promise<OptimizeR
     const res = await fetch(`/api/backtest/optimize/${batchId}/results`);
     return res.json();
   }
-  await delay(200);
-  // Demo mode: return simulated data
-  const top3: OptimizeResultItem[] = [
-    { params: { ma_short: 5, ma_long: 30, stop_loss: 0.05, take_profit: 0.15, position: 0.8 }, metrics: { total_return: 25.4, annual_return: 8.5, max_drawdown: -12.3, sharpe_ratio: 1.85, win_rate: 58.2, total_trades: 45 } },
-    { params: { ma_short: 8, ma_long: 25, stop_loss: 0.04, take_profit: 0.12, position: 0.7 }, metrics: { total_return: 22.1, annual_return: 7.4, max_drawdown: -10.5, sharpe_ratio: 1.62, win_rate: 55.8, total_trades: 38 } },
-    { params: { ma_short: 6, ma_long: 35, stop_loss: 0.06, take_profit: 0.18, position: 0.9 }, metrics: { total_return: 19.8, annual_return: 6.6, max_drawdown: -14.2, sharpe_ratio: 1.45, win_rate: 53.1, total_trades: 52 } },
-  ];
-  const heatmap_data: HeatmapPoint[] = [];
-  for (let ma_s = 3; ma_s <= 20; ma_s += 1) {
-    for (let ma_l = 20; ma_l <= 60; ma_l += 5) {
-      if (ma_s < ma_l) {
-        heatmap_data.push({ ma_short: ma_s, ma_long: ma_l, total_return: (Math.random() - 0.3) * 40 });
-      }
-    }
+
+  const state = optimState.get(batchId);
+  if (!state) {
+    return { batch_id: batchId, status: "not_found", total_combinations: 0, completed_combinations: 0, top3: [], heatmap_data: [], scatter_data: [] };
   }
-  const scatter_data: ScatterPoint[] = top3.map(t => ({
-    max_drawdown: t.metrics.max_drawdown,
-    total_return: t.metrics.total_return,
-    ma_short: t.params.ma_short,
-    ma_long: t.params.ma_long,
+
+  // Sort by total_return descending
+  const sorted = [...state.results].sort((a, b) => b.metrics.total_return - a.metrics.total_return);
+  const top3 = sorted.slice(0, 3);
+
+  // Build heatmap_data from all results (ma_short × ma_long)
+  const heatmap_data: HeatmapPoint[] = state.results.map(r => ({
+    ma_short: r.params.ma_short,
+    ma_long: r.params.ma_long,
+    total_return: r.metrics.total_return,
   }));
+
+  // Build scatter_data
+  const scatter_data: ScatterPoint[] = state.results.map(r => ({
+    max_drawdown: r.metrics.max_drawdown,
+    total_return: r.metrics.total_return,
+    ma_short: r.params.ma_short,
+    ma_long: r.params.ma_long,
+  }));
+
+  optimState.delete(batchId);
+
   return {
     batch_id: batchId,
     status: "completed",
-    total_combinations: 100,
-    completed_combinations: 100,
+    total_combinations: state.combos.length,
+    completed_combinations: state.completed,
     top3,
     heatmap_data,
     scatter_data,
@@ -887,7 +957,9 @@ export const cancelOptimization = async (batchId: string) => {
     const res = await fetch(`/api/backtest/optimize/${batchId}/cancel`, { method: "POST" });
     return res.json();
   }
-  await delay(200);
+  await delay(100);
+  const state = optimState.get(batchId);
+  if (state) state.cancelled = true;
   return { message: "Optimization cancelled", batch_id: batchId };
 };
 

@@ -90,17 +90,141 @@ export function calculateRSI(closes: number[], period = 14): number {
   return 100 - (100 / (1 + rs));
 }
 
-// MACD - Moving Average Convergence Divergence
+// MACD - Moving Average Convergence Divergence (current value only)
 export function calculateMACD(closes: number[]): { macd: number; signal: number; hist: number } {
   const ema12 = ema(closes, 12);
   const ema26 = ema(closes, 26);
   const macd = ema12 - ema26;
-
-  // Signal line = 9-day EMA of MACD
-  // Approximate with current MACD value
+  // Signal line = 9-day EMA of MACD (approximated)
   const signal = macd * 0.9;
   const hist = macd - signal;
   return { macd, signal, hist };
+}
+
+// Compute MACD line values for each point in time (for backtesting)
+function computeMACDLine(closes: number[], fast = 12, slow = 26): number[] {
+  const macdLine: number[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    const emaFast = ema(closes.slice(0, i + 1), fast);
+    const emaSlow = ema(closes.slice(0, i + 1), slow);
+    macdLine.push(emaFast - emaSlow);
+  }
+  return macdLine;
+}
+
+// Compute Signal line (9-day EMA of MACD line)
+function computeSignalLine(macdLine: number[], signalPeriod = 9): number[] {
+  const signalLine: number[] = [];
+  for (let i = 0; i < macdLine.length; i++) {
+    if (i < signalPeriod - 1) {
+      // Not enough data for signal EMA, use raw MACD * 0.9 approximation
+      signalLine.push(macdLine[i] * 0.9);
+    } else {
+      // Proper 9-day EMA of MACD values
+      const k = 2 / (signalPeriod + 1);
+      let sig = macdLine.slice(i - signalPeriod, i).reduce((a, b) => a + b, 0) / signalPeriod;
+      sig = macdLine[i] * k + sig * (1 - k);
+      signalLine.push(sig);
+    }
+  }
+  return signalLine;
+}
+
+// MACD Trend Strategy backtest
+export function macdTrendBacktest(
+  history: OHLCV[],
+  initialCash: number,
+  params: { macd_fast?: number; macd_slow?: number; macd_signal?: number; hist_threshold?: number }
+): BacktestResult {
+  const fast = params.macd_fast || 12;
+  const slow = params.macd_slow || 26;
+  const signalPeriod = params.macd_signal || 9;
+  const histThreshold = params.hist_threshold || 0;
+
+  const closes = history.map(h => h.close);
+
+  const macdLine = computeMACDLine(closes, fast, slow);
+  const signalLine = computeSignalLine(macdLine, signalPeriod);
+
+  let cash = initialCash;
+  let position = 0;
+  let shares = 0;
+  let peak = initialCash;
+  let maxDrawdown = 0;
+  let wins = 0, losses = 0;
+  const equityCurve: { date: string; value: number }[] = [];
+  const trades: BacktestSignal[] = [];
+
+  // Need at least slow + signalPeriod bars to have meaningful signals
+  const startIdx = slow + signalPeriod;
+
+  for (let i = startIdx; i < closes.length; i++) {
+    const macd = macdLine[i];
+    const sig = signalLine[i];
+    const macdPrev = macdLine[i - 1];
+    const sigPrev = signalLine[i - 1];
+    const hist = macd - sig;
+    const histPrev = macdPrev - sigPrev;
+
+    const price = closes[i];
+    const date = history[i].date;
+
+    // Golden cross: MACD crosses above signal line AND histogram positive (or strengthening)
+    if (position === 0 && macd > sig && macdPrev <= sigPrev && hist > histPrev) {
+      shares = Math.floor(cash / price);
+      cash -= shares * price;
+      position = 1;
+      trades.push({ date, action: "buy", price, reason: `MACD金叉((${macd.toFixed(2)})上穿信号线(${sig.toFixed(2)})), histogram=${hist.toFixed(2)}` });
+    }
+    // Death cross: MACD crosses below signal line OR strong negative histogram
+    else if (position === 1 && (macd < sig && macdPrev >= sigPrev) || (hist < -histThreshold && hist < histPrev)) {
+      cash += shares * price;
+      const profitPct = (price - trades[trades.length - 1].price) / trades[trades.length - 1].price;
+      trades.push({ date, action: "sell", price, reason: macd < sig && macdPrev >= sigPrev ? `MACD死叉(${macd.toFixed(2)})下穿信号线(${sig.toFixed(2)})` : `Histogram加速下行(${hist.toFixed(2)})` });
+      if (profitPct > 0) wins++;
+      else losses++;
+      shares = 0;
+      position = 0;
+    }
+
+    const equity = cash + shares * price;
+    equityCurve.push({ date, value: equity });
+    if (equity > peak) peak = equity;
+    const drawdown = (peak - equity) / peak;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+  }
+
+  // Close any open position at the end
+  if (position === 1) {
+    const finalPrice = closes[closes.length - 1];
+    cash += shares * finalPrice;
+    shares = 0;
+    position = 0;
+  }
+
+  const finalValue = cash;
+  const totalReturn = ((finalValue - initialCash) / initialCash) * 100;
+  const years = history.length / 252;
+  const annualReturn = years > 0 ? (Math.pow(finalValue / initialCash, 1 / years) - 1) * 100 : 0;
+  const totalTrades = trades.length;
+  const winRate = totalTrades > 0 ? wins / (wins + losses || 1) : 0;
+
+  const returns = equityCurve.slice(1).map((e, i) => (e.value - equityCurve[i].value) / equityCurve[i].value);
+  const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+  const stdReturn = Math.sqrt(returns.length > 0 ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length : 0);
+  const sharpeRatio = stdReturn > 0 ? (avgReturn / stdReturn) * Math.sqrt(252) : 0;
+
+  return {
+    strategy_name: "MACD趋势策略",
+    total_return: totalReturn,
+    annual_return: annualReturn,
+    max_drawdown: -maxDrawdown * 100,
+    sharpe_ratio: sharpeRatio,
+    win_rate: winRate,
+    total_trades: totalTrades,
+    equity_curve: equityCurve,
+    trades: trades.filter(t => t.action !== "hold"),
+  };
 }
 
 // KDJ indicator

@@ -599,6 +599,10 @@ function estimateCombinations(
   takeProfit: ParameterRange,
   position: ParameterRange,
 ): number {
-  const count = (r: ParameterRange) => Math.max(1, Math.ceil((r.max - r.min) / r.step) + 1)
-  return count(maShort) * count(maLong) * count(stopLoss) * count(takeProfit) * count(position)
+  const count = (r: ParameterRange) => Math.max(1, Math.ceil((r.max - r.min) / r.step) + 1);
+  const maShortCount = count(maShort);
+  const maLongCount = count(maLong);
+  // Only combos where ma_short < ma_long are valid
+  const validMACount = Math.max(0, maShortCount * maLongCount - Math.ceil(maLongCount * (maLongCount + 1) / 2));
+  return validMACount * count(stopLoss) * count(takeProfit) * count(position);
 }
