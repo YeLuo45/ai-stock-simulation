@@ -16,10 +16,8 @@ import {
   ScatterPoint,
   ParameterRange,
 } from '../types'
-import { Settings2, Play, X, CheckCircle2, TrendingUp, TrendingDown, BarChart2, Target, Zap, RotateCcw } from 'lucide-react'
+import { Settings2, Play, X, TrendingUp, TrendingDown, BarChart2, Target, RotateCcw } from 'lucide-react'
 import clsx from 'clsx'
-
-const DEFAULT_RANGE: ParameterRange = { min: 0, max: 0, step: 0.01 }
 
 export default function OptimizePage() {
   const { showNotification } = useStore()

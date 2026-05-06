@@ -298,3 +298,53 @@ export interface OptimizeResultsResponse {
   scatter_data: ScatterPoint[];
 }
 
+// ============== Stock Screener ==============
+
+export interface FinancialCriteria {
+  min_pe?: number;
+  max_pe?: number;
+  min_roe?: number;
+  max_roe?: number;
+  min_pb?: number;
+  max_pb?: number;
+  min_market_cap?: number; // in 亿
+  max_market_cap?: number;
+  dividend_yield_min?: number;
+}
+
+export interface TechnicalCriteria {
+  ma_cross?: "golden" | "death"; // 金叉/死叉
+  rsi_above?: number;
+  rsi_below?: number;
+  macd_signal?: "golden" | "death";
+  volume_ratio_min?: number;
+}
+
+export interface SentimentCriteria {
+  news_positive?: boolean;
+}
+
+export interface StockScreenerRequest {
+  financial?: FinancialCriteria;
+  technical?: TechnicalCriteria;
+  sentiment?: SentimentCriteria;
+}
+
+export interface StockScreenerResponse {
+  stocks: StockInfo[];
+  total_count: number;
+  filters_applied: string[];
+}
+
+// ============== Saved Strategy ==============
+
+export interface SavedStrategy {
+  id: string;
+  name: string;
+  tab: "financial" | "technical" | "sentiment";
+  financial?: FinancialCriteria;
+  technical?: TechnicalCriteria;
+  sentiment?: SentimentCriteria;
+  created_at: string;
+}
+

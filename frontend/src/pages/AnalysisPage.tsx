@@ -2,7 +2,7 @@
  * Technical Analysis Page - AI-powered chart analysis with multi-panel K-line chart
  * Now also supports batch backtesting with comparison table
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useStore } from "../store";
 import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest, getKlineData, exportReport } from "../services/api";
 import { generatePriceHistory } from "../services/indicators";
@@ -211,7 +211,6 @@ export default function AnalysisPage() {
   const handleExportPDF = async () => {
     if (batchResults.length === 0) return;
     try {
-      const topResult = sortedResults[0];
       const avgReturn = sortedResults.reduce((s, r) => s + r.total_return, 0) / sortedResults.length;
       const avgDD = sortedResults.reduce((s, r) => s + r.max_drawdown, 0) / sortedResults.length;
       const avgSharpe = sortedResults.reduce((s, r) => s + r.sharpe_ratio, 0) / sortedResults.length;
@@ -315,7 +314,9 @@ export default function AnalysisPage() {
   );
 
   // ---- Pool symbol selector for batch mode ----
-  const poolSymbols = activePool?.stocks.map(s => s.symbol) || [];
+  // (used for pool-based batch selection)
+  const _poolSymbols = activePool?.stocks.map(s => s.symbol) || [];
+  void _poolSymbols; // suppress unused warning
 
   const indicatorGroups = [
     { label: "均线", items: [

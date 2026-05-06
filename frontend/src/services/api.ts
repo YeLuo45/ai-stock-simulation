@@ -14,6 +14,7 @@ import type {
   OptimizeRequest, OptimizeResponse, OptimizeProgress,
   OptimizeResultsResponse, OptimizeResultItem,
   HeatmapPoint, ScatterPoint,
+  StockScreenerRequest, StockScreenerResponse,
 } from "../types";
 import {
   getPortfolio as s_getPortfolio,
@@ -888,4 +889,87 @@ export const cancelOptimization = async (batchId: string) => {
   }
   await delay(200);
   return { message: "Optimization cancelled", batch_id: batchId };
+};
+
+// ============== Stock Screener ==============
+
+export const stockScreener = async (req: StockScreenerRequest): Promise<StockScreenerResponse> => {
+  if (!isDemoMode) {
+    const res = await fetch(`/api/stock-screener`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    return res.json();
+  }
+
+  await delay(600);
+
+  const { financial, technical, sentiment } = req;
+  const filters: string[] = [];
+  let results = [...DEFAULT_STOCKS];
+
+  if (financial) {
+    if (financial.min_pe !== undefined) {
+      results = results.filter(s => s.pe !== undefined && s.pe >= financial.min_pe!);
+      filters.push(`PE≥${financial.min_pe}`);
+    }
+    if (financial.max_pe !== undefined) {
+      results = results.filter(s => s.pe !== undefined && s.pe <= financial.max_pe!);
+      filters.push(`PE≤${financial.max_pe}`);
+    }
+    if (financial.min_roe !== undefined) {
+      results = results.filter(s => s.roe !== undefined && s.roe >= financial.min_roe!);
+      filters.push(`ROE≥${financial.min_roe}%`);
+    }
+    if (financial.max_roe !== undefined) {
+      results = results.filter(s => s.roe !== undefined && s.roe <= financial.max_roe!);
+      filters.push(`ROE≤${financial.max_roe}%`);
+    }
+    if (financial.min_pb !== undefined) {
+      results = results.filter(s => s.pb !== undefined && s.pb >= financial.min_pb!);
+      filters.push(`PB≥${financial.min_pb}`);
+    }
+    if (financial.max_pb !== undefined) {
+      results = results.filter(s => s.pb !== undefined && s.pb <= financial.max_pb!);
+      filters.push(`PB≤${financial.max_pb}`);
+    }
+    if (financial.min_market_cap !== undefined) {
+      const minCap = financial.min_market_cap * 1e8;
+      results = results.filter(s => s.market_cap !== undefined && s.market_cap >= minCap);
+      filters.push(`市值≥${financial.min_market_cap}亿`);
+    }
+    if (financial.max_market_cap !== undefined) {
+      const maxCap = financial.max_market_cap * 1e8;
+      results = results.filter(s => s.market_cap !== undefined && s.market_cap <= maxCap);
+      filters.push(`市值≤${financial.max_market_cap}亿`);
+    }
+  }
+
+  if (technical) {
+    if (technical.rsi_above !== undefined) {
+      results = results.filter(() => Math.random() > 0.3);
+      filters.push(`RSI>${technical.rsi_above}`);
+    }
+    if (technical.rsi_below !== undefined) {
+      results = results.filter(() => Math.random() > 0.3);
+      filters.push(`RSI<${technical.rsi_below}`);
+    }
+    if (technical.ma_cross) {
+      filters.push(technical.ma_cross === "golden" ? "MA金叉" : "MA死叉");
+    }
+    if (technical.macd_signal) {
+      filters.push(technical.macd_signal === "golden" ? "MACD金叉" : "MACD死叉");
+    }
+    if (technical.volume_ratio_min !== undefined) {
+      filters.push(`量比≥${technical.volume_ratio_min}`);
+    }
+  }
+
+  if (sentiment?.news_positive) {
+    filters.push("正面消息面");
+  }
+
+  const stocks = results.slice(0, 20);
+  return { stocks, total_count: stocks.length, filters_applied: filters };
 };
