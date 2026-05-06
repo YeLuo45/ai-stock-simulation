@@ -181,6 +181,25 @@ npm run dev
 
 ---
 
+## P-20260506-029: C. 实时行情面板（2026-05-06）
+
+### 新增功能
+- **MarketPage.tsx**: 实时行情面板，4 Tab 切换
+- **自选股 Tab**: 我的自选股实时行情，添加/删除功能
+- **涨幅榜/跌幅榜/成交额 Tab**: 全市场排行
+- **Mock WebSocket**: 模拟实时数据更新（每2秒价格波动）
+- **行情脉冲动画**: 数据变化时行闪烁
+- **导航集成**: NavHeader 新增"行情"入口（Activity图标）
+- **localStorage**: 自选股列表持久化（key: `my-stocks`）
+
+### 新增/修改文件
+- `frontend/src/pages/MarketPage.tsx` — 新页面
+- `frontend/src/App.tsx` — 路由注册
+- `frontend/src/components/NavHeader.tsx` — 导航项
+- `frontend/src/types/index.ts` — Page 类型扩展
+
+---
+
 ## 后续优化建议
 
 1. 添加 IPO 数据缓存机制
