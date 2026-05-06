@@ -99,6 +99,48 @@ export async function searchSymbols(query: string): Promise<{ symbol: string; na
 }
 
 /**
+ * Get fundamental data for a stock (PE, PB, market cap, etc.)
+ */
+export async function fetchFundamentalData(symbol: string): Promise<{
+  pe?: number;
+  pb?: number;
+  marketCap?: number;
+  dividendYield?: number;
+  week52High?: number;
+  week52Low?: number;
+  volume?: number;
+  avgVolume?: number;
+  eps?: number;
+  beta?: number;
+}> {
+  const normalized = normalizeSymbol(symbol);
+  const url = `${BASE_URL}/${normalized}?interval=1d&range=5d`;
+
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const data = await response.json();
+  const result = data.chart?.result?.[0];
+  if (!result) throw new Error('No data');
+
+  const meta = result.meta;
+  return {
+    pe: meta.trailingPE,
+    pb: meta.priceToBook,
+    marketCap: meta.marketCap,
+    dividendYield: meta.dividendYield,
+    week52High: meta.fiftyTwoWeekHigh,
+    week52Low: meta.fiftyTwoWeekLow,
+    volume: meta.regularMarketVolume,
+    avgVolume: meta.averageDailyVolume10Day || meta.averageVolume10d,
+    eps: meta.trailingEps,
+    beta: meta.beta,
+  };
+}
+
+/**
  * Get realtime quote
  */
 export async function getRealtimeQuote(symbol: string): Promise<{

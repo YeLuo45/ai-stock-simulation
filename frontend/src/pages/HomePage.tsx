@@ -1,10 +1,31 @@
 import { useStore } from '../store'
-import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
+import { useState, useCallback, Fragment } from 'react'
+import { fetchFundamentalData } from '../services/yahooFinance'
 
 export default function HomePage() {
   const { portfolio, trades, isLoading, setPage } = useStore()
+
+  const [expandedPosition, setExpandedPosition] = useState<string | null>(null);
+  const [fundamentalCache, setFundamentalCache] = useState<Record<string, any>>({});
+
+  const handleToggleExpand = useCallback(async (stockCode: string) => {
+    if (expandedPosition === stockCode) {
+      setExpandedPosition(null);
+      return;
+    }
+    setExpandedPosition(stockCode);
+    if (!fundamentalCache[stockCode]) {
+      try {
+        const data = await fetchFundamentalData(stockCode);
+        setFundamentalCache(prev => ({ ...prev, [stockCode]: data }));
+      } catch (e) {
+        // silently fail, card shows no data
+      }
+    }
+  }, [expandedPosition, fundamentalCache]);
 
   if (isLoading && !portfolio) {
     return (
@@ -101,24 +122,50 @@ export default function HomePage() {
                 </tr>
               </thead>
               <tbody>
-                {positions.slice(0, 5).map((pos) => (
-                  <tr key={pos.id} className="border-b border-border-color/50 hover:bg-bg-tertiary/50 transition-colors">
-                    <td className="py-3 px-2">
-                      <div className="font-mono font-medium">{pos.symbol}</div>
-                      <div className="text-text-muted text-xs">{pos.name}</div>
-                    </td>
-                    <td className="text-right py-3 px-2 font-mono">{pos.quantity}</td>
-                    <td className="text-right py-3 px-2 font-mono">¥{pos.avg_cost.toFixed(2)}</td>
-                    <td className="text-right py-3 px-2 font-mono">¥{pos.current_price.toFixed(2)}</td>
-                    <td className="text-right py-3 px-2 font-mono">¥{pos.market_value.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
-                    <td className={clsx(
-                      'text-right py-3 px-2 font-mono font-medium',
-                      pos.profit_loss >= 0 ? 'text-accent-success' : 'text-accent-danger'
-                    )}>
-                      {pos.profit_loss >= 0 ? '+' : ''}{pos.profit_loss_pct.toFixed(2)}%
-                    </td>
-                  </tr>
-                ))}
+                  {positions.slice(0, 5).map((pos) => (
+                    <Fragment key={pos.id}>
+                      <tr className="border-b border-border-color/50 hover:bg-bg-tertiary/50 transition-colors">
+                        <td className="py-3 px-2">
+                          <div className="font-mono font-medium">{pos.symbol}</div>
+                          <div className="text-text-muted text-xs">{pos.name}</div>
+                        </td>
+                        <td className="text-right py-3 px-2 font-mono">{pos.quantity}</td>
+                        <td className="text-right py-3 px-2 font-mono">¥{pos.avg_cost.toFixed(2)}</td>
+                        <td className="text-right py-3 px-2 font-mono">¥{pos.current_price.toFixed(2)}</td>
+                        <td className="text-right py-3 px-2 font-mono">¥{pos.market_value.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
+                        <td className={clsx(
+                          'text-right py-3 px-2 font-mono font-medium flex items-center justify-end gap-2',
+                          pos.profit_loss >= 0 ? 'text-accent-success' : 'text-accent-danger'
+                        )}>
+                          <span>
+                            {pos.profit_loss >= 0 ? '+' : ''}{pos.profit_loss_pct.toFixed(2)}%
+                          </span>
+                          <button
+                            onClick={() => handleToggleExpand(pos.symbol)}
+                            className="text-text-muted hover:text-accent-primary"
+                          >
+                            {expandedPosition === pos.symbol ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </td>
+                      </tr>
+                      {(expandedPosition === pos.symbol && fundamentalCache[pos.symbol]) && (
+                        <tr>
+                          <td colSpan={6} className="py-3 px-2">
+                            <div className="mt-3 pt-3 border-t border-border-color grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                              <FundamentalItem label="市盈率" value={fundamentalCache[pos.symbol].pe?.toFixed(2) ?? '-'} />
+                              <FundamentalItem label="市净率" value={fundamentalCache[pos.symbol].pb?.toFixed(2) ?? '-'} />
+                              <FundamentalItem label="总市值" value={fundamentalCache[pos.symbol].marketCap ? `${(fundamentalCache[pos.symbol].marketCap / 1e8).toFixed(2)}亿` : '-'} />
+                              <FundamentalItem label="股息率" value={fundamentalCache[pos.symbol].dividendYield ? `${(fundamentalCache[pos.symbol].dividendYield * 100).toFixed(2)}%` : '-'} />
+                              <FundamentalItem label="52W高" value={fundamentalCache[pos.symbol].week52High?.toFixed(2) ?? '-'} />
+                              <FundamentalItem label="52W低" value={fundamentalCache[pos.symbol].week52Low?.toFixed(2) ?? '-'} />
+                              <FundamentalItem label="EPS" value={fundamentalCache[pos.symbol].eps?.toFixed(2) ?? '-'} />
+                              <FundamentalItem label="Beta" value={fundamentalCache[pos.symbol].beta?.toFixed(2) ?? '-'} />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -161,6 +208,15 @@ export default function HomePage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function FundamentalItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-text-muted">{label}</span>
+      <span className="font-mono font-medium text-text-primary">{value}</span>
     </div>
   )
 }
