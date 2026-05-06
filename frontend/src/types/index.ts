@@ -146,7 +146,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market";
 
 // ============== Stock Pool ==============
 

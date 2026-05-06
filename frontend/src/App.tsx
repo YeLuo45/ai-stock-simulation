@@ -11,6 +11,7 @@ import IPOEvaluationPage from './pages/IPOEvaluationPage'
 import StockPoolPage from './pages/StockPoolPage'
 import OptimizePage from './pages/OptimizePage'
 import StrategyBuilderPage from './pages/StrategyBuilderPage'
+import MarketPage from './pages/MarketPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -56,6 +57,8 @@ function App() {
         return <IPOEvaluationPage />
       case 'strategybuilder':
         return <StrategyBuilderPage />
+      case 'market':
+        return <MarketPage />
       default:
         return <HomePage />
     }
