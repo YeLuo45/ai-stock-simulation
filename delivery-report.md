@@ -130,6 +130,33 @@ npm run dev
 - 实时行情数据可能有延迟
 - 需要网络连接获取外部数据
 
+## P-20260506-027: P1 智能选股策略（2026-05-06）
+
+### 新增功能
+- **财务指标筛选**: PE/ROE/PB/市值/股息率区间筛选
+- **技术面选股**: 均线多头/黄金交叉+死亡交叉/MACD信号/RSI超买超卖/量比
+- **消息面选股**: 业绩预告（预增/预减/扭亏/首亏/续亏）
+- **Tab 切换 UI**: 财务指标 | 技术面 | 消息面 三个面板
+- **策略保存/加载**: localStorage 持久化已命名策略
+- **Backend API**: `POST /api/stock-screener` + `GET /api/stock-screener/presets`
+- **预设策略**: 低估价值/成长激进/技术强势/量价齐升/超卖反弹/高股息
+
+### 新增文件
+- `backend/services/screener.py` — 选股引擎核心
+- `backend/routers/stock_screener.py` — API 路由
+- 重构 `frontend/src/pages/SelectionPage.tsx`
+- `frontend/src/services/api.ts` 新增 `stockScreener()`
+- `frontend/src/types/index.ts` 新增类型定义
+
+### 技术栈
+- Frontend: React + Vite + TypeScript + Tailwind
+- Backend: FastAPI + akshare
+
+### 依赖
+- 新增 `frontend/src/types/index.ts` 类型（无新npm依赖）
+
+---
+
 ## 后续优化建议
 
 1. 添加 IPO 数据缓存机制
