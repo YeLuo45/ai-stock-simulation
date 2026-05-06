@@ -903,14 +903,28 @@ export const getOptimizationProgress = async (batchId: string): Promise<Optimize
   }
 
   const state2 = optimState.get(batchId)!;
-  const SYMBOLS = ["平安银行", "万科A", "宁德时代"];
-  const basePrice = findStock(SYMBOLS[0]).price;
+
+  // 如果请求中指定了 symbol（6位A股代码），尝试获取真实K线数据
+  let history: any[];
+  if (state2.req.symbol && /^\d{6}$/.test(state2.req.symbol)) {
+    try {
+      const klineData = await fetchKlineData(state2.req.symbol, 300);
+      history = klineData.map(k => ({ price: k.close }));
+    } catch {
+      const SYMBOLS = ["平安银行", "万科A", "宁德时代"];
+      const basePrice = findStock(SYMBOLS[0]).price;
+      history = generatePriceHistory(basePrice, 252);
+    }
+  } else {
+    const SYMBOLS = ["平安银行", "万科A", "宁德时代"];
+    const basePrice = findStock(SYMBOLS[0]).price;
+    history = generatePriceHistory(basePrice, 252);
+  }
 
   // Process combos in batches of 3 for faster demo
   const BATCH = 3;
   for (let i = 0; i < BATCH && state2.completed < state2.combos.length && !state2.cancelled; i++) {
     const combo = state2.combos[state2.completed];
-    const history = generatePriceHistory(basePrice, 252);
 
     // Run the MA cross strategy with these parameters (trendFollowingBacktest uses ma_short/ma_long)
     const result = trendFollowingBacktest(history, 1_000_000, {

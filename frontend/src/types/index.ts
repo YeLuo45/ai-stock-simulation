@@ -230,6 +230,7 @@ export interface ParameterRange {
 export interface OptimizeRequest {
   strategy_name?: string;
   symbols?: string[];
+  symbol?: string;  // 用于 demo 模式单只股票真实K线优化
   start_date?: string;
   end_date?: string;
   initial_cash?: number;

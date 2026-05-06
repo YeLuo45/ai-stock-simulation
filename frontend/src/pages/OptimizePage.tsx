@@ -59,6 +59,7 @@ export default function OptimizePage() {
   const handleStart = async () => {
     const req: OptimizeRequest = {
       strategy_name: 'MA交叉策略',
+      symbol: '000001',  // 默认用平安银行真实K线
       ma_short_range: maShortRange,
       ma_long_range: maLongRange,
       stop_loss_range: stopLossRange,
