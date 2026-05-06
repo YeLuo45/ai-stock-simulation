@@ -8,7 +8,7 @@
  * - RSI (12.5%): RSI curve + 30/70 overbought/oversold lines
  * - KDJ (12.5%): K/D/J curves
  */
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import {
   createChart,
   IChartApi,
@@ -60,6 +60,9 @@ export default function KLineChart({ data, symbol }: KLineChartProps) {
   const macdChartRef = useRef<IChartApi | null>(null);
   const rsiChartRef = useRef<IChartApi | null>(null);
   const kdjChartRef = useRef<IChartApi | null>(null);
+  const [showMACD, setShowMACD] = useState(true);
+  const [showRSI, setShowRSI] = useState(true);
+  const [showKDJ, setShowKDJ] = useState(true);
 
   // Calculate indicators from data
   const indicators = useMemo(() => {
@@ -248,111 +251,120 @@ export default function KLineChart({ data, symbol }: KLineChartProps) {
     ma20Series.setData(indicators.ma20Data);
 
     // MACD chart
-    const macdChart = createChart(container, makeChartOptions(macdHeight));
-    macdChartRef.current = macdChart;
+    if (showMACD) {
+      const macdChart = createChart(container, makeChartOptions(macdHeight));
+      macdChartRef.current = macdChart;
 
-    // MACD histogram
-    const macdHistogram = macdChart.addSeries(HistogramSeries, {
-      priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
-      priceScaleId: "right",
-    });
-    macdHistogram.setData(indicators.macdResult.histogram);
+      // MACD histogram
+      const macdHistogram = macdChart.addSeries(HistogramSeries, {
+        priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+        priceScaleId: "right",
+      });
+      macdHistogram.setData(indicators.macdResult.histogram);
 
-    // DIF line
-    const difSeries = macdChart.addSeries(LineSeries, {
-      color: COLORS.dif,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    difSeries.setData(indicators.macdResult.dif);
+      // DIF line
+      const difSeries = macdChart.addSeries(LineSeries, {
+        color: COLORS.dif,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      difSeries.setData(indicators.macdResult.dif);
 
-    // DEA line
-    const deaSeries = macdChart.addSeries(LineSeries, {
-      color: COLORS.dea,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    deaSeries.setData(indicators.macdResult.dea);
+      // DEA line
+      const deaSeries = macdChart.addSeries(LineSeries, {
+        color: COLORS.dea,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      deaSeries.setData(indicators.macdResult.dea);
+    }
 
     // RSI chart
-    const rsiChart = createChart(container, makeChartOptions(rsiHeight));
-    rsiChartRef.current = rsiChart;
+    if (showRSI) {
+      const rsiChart = createChart(container, makeChartOptions(rsiHeight));
+      rsiChartRef.current = rsiChart;
 
-    // RSI line
-    const rsiSeries = rsiChart.addSeries(LineSeries, {
-      color: COLORS.rsi,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      priceScaleId: "right",
-    });
-    rsiSeries.setData(indicators.rsiData);
+      // RSI line
+      const rsiSeries = rsiChart.addSeries(LineSeries, {
+        color: COLORS.rsi,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        priceScaleId: "right",
+      });
+      rsiSeries.setData(indicators.rsiData);
 
-    // RSI overbought/oversold lines
-    const rsi30Data: LineData[] = indicators.times.map((t) => ({ time: t, value: 30 }));
-    const rsi70Data: LineData[] = indicators.times.map((t) => ({ time: t, value: 70 }));
+      // RSI overbought/oversold lines
+      const rsi30Data: LineData[] = indicators.times.map((t) => ({ time: t, value: 30 }));
+      const rsi70Data: LineData[] = indicators.times.map((t) => ({ time: t, value: 70 }));
 
-    const rsi30Series = rsiChart.addSeries(LineSeries, {
-      color: COLORS.rsi30,
-      lineWidth: 1,
-      lineStyle: 2, // Dashed
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    rsi30Series.setData(rsi30Data);
+      const rsi30Series = rsiChart.addSeries(LineSeries, {
+        color: COLORS.rsi30,
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      rsi30Series.setData(rsi30Data);
 
-    const rsi70Series = rsiChart.addSeries(LineSeries, {
-      color: COLORS.rsi70,
-      lineWidth: 1,
-      lineStyle: 2, // Dashed
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    rsi70Series.setData(rsi70Data);
+      const rsi70Series = rsiChart.addSeries(LineSeries, {
+        color: COLORS.rsi70,
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      rsi70Series.setData(rsi70Data);
+    }
 
     // KDJ chart
-    const kdjChart = createChart(container, makeChartOptions(kdjHeight));
-    kdjChartRef.current = kdjChart;
+    if (showKDJ) {
+      const kdjChart = createChart(container, makeChartOptions(kdjHeight));
+      kdjChartRef.current = kdjChart;
 
-    // K line
-    const kSeries = kdjChart.addSeries(LineSeries, {
-      color: COLORS.k,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    kSeries.setData(indicators.kdjResult.k);
+      // K line
+      const kSeries = kdjChart.addSeries(LineSeries, {
+        color: COLORS.k,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      kSeries.setData(indicators.kdjResult.k);
 
-    // D line
-    const dSeries = kdjChart.addSeries(LineSeries, {
-      color: COLORS.d,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    dSeries.setData(indicators.kdjResult.d);
+      // D line
+      const dSeries = kdjChart.addSeries(LineSeries, {
+        color: COLORS.d,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      dSeries.setData(indicators.kdjResult.d);
 
-    // J line
-    const jSeries = kdjChart.addSeries(LineSeries, {
-      color: COLORS.j,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    jSeries.setData(indicators.kdjResult.j);
+      // J line
+      const jSeries = kdjChart.addSeries(LineSeries, {
+        color: COLORS.j,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      jSeries.setData(indicators.kdjResult.j);
+    }
 
-    // Synchronize time scales across all charts
-    const syncCharts = [mainChart, macdChart, rsiChart, kdjChart];
+    // Synchronize time scales across all visible charts
+    const syncCharts: IChartApi[] = [mainChart];
+    if (showMACD && macdChartRef.current) syncCharts.push(macdChartRef.current);
+    if (showRSI && rsiChartRef.current) syncCharts.push(rsiChartRef.current);
+    if (showKDJ && kdjChartRef.current) syncCharts.push(kdjChartRef.current);
     syncCharts.forEach((sourceChart) => {
       sourceChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (range) {
@@ -389,9 +401,9 @@ export default function KLineChart({ data, symbol }: KLineChartProps) {
       const newKdjHeight = newHeight * 0.125;
 
       mainChart.applyOptions({ width: newWidth, height: newMainHeight });
-      macdChart.applyOptions({ width: newWidth, height: newMacdHeight });
-      rsiChart.applyOptions({ width: newWidth, height: newRsiHeight });
-      kdjChart.applyOptions({ width: newWidth, height: newKdjHeight });
+      if (showMACD && macdChartRef.current) macdChartRef.current.applyOptions({ width: newWidth, height: newMacdHeight });
+      if (showRSI && rsiChartRef.current) rsiChartRef.current.applyOptions({ width: newWidth, height: newRsiHeight });
+      if (showKDJ && kdjChartRef.current) kdjChartRef.current.applyOptions({ width: newWidth, height: newKdjHeight });
     };
 
     window.addEventListener("resize", handleResize);
@@ -400,15 +412,15 @@ export default function KLineChart({ data, symbol }: KLineChartProps) {
     return () => {
       window.removeEventListener("resize", handleResize);
       mainChart.remove();
-      macdChart.remove();
-      rsiChart.remove();
-      kdjChart.remove();
+      if (macdChartRef.current) macdChartRef.current.remove();
+      if (rsiChartRef.current) rsiChartRef.current.remove();
+      if (kdjChartRef.current) kdjChartRef.current.remove();
       mainChartRef.current = null;
       macdChartRef.current = null;
       rsiChartRef.current = null;
       kdjChartRef.current = null;
     };
-  }, [data, indicators]);
+  }, [data, indicators, showMACD, showRSI, showKDJ]);
 
   // Legend display
   const renderLegend = () => {
@@ -439,6 +451,26 @@ export default function KLineChart({ data, symbol }: KLineChartProps) {
         <span className="text-text-muted font-mono">
           <span style={{ color: COLORS.ma20 }}>MA20</span>
         </span>
+        <span className="flex gap-1 ml-2">
+          <button
+            onClick={() => setShowMACD(v => !v)}
+            className={`px-1.5 py-0.5 rounded text-xs cursor-pointer transition-colors ${showMACD ? "bg-blue-600 text-white" : "bg-bg-secondary text-text-muted"}`}
+          >
+            MACD
+          </button>
+          <button
+            onClick={() => setShowRSI(v => !v)}
+            className={`px-1.5 py-0.5 rounded text-xs cursor-pointer transition-colors ${showRSI ? "bg-pink-600 text-white" : "bg-bg-secondary text-text-muted"}`}
+          >
+            RSI
+          </button>
+          <button
+            onClick={() => setShowKDJ(v => !v)}
+            className={`px-1.5 py-0.5 rounded text-xs cursor-pointer transition-colors ${showKDJ ? "bg-green-600 text-white" : "bg-bg-secondary text-text-muted"}`}
+          >
+            KDJ
+          </button>
+        </span>
       </div>
     );
   };
@@ -450,24 +482,30 @@ export default function KLineChart({ data, symbol }: KLineChartProps) {
       style={{ height: "600px", backgroundColor: COLORS.background }}
     >
       {renderLegend()}
-      <div
-        className="absolute left-0 right-0 text-center text-text-muted text-xs py-1 pointer-events-none"
-        style={{ top: "60%", transform: "translateY(-50%)", height: "15%" }}
-      >
-        <span className="bg-bg-primary px-2 py-0.5 rounded">MACD(12,26,9)</span>
-      </div>
-      <div
-        className="absolute left-0 right-0 text-center text-text-muted text-xs py-1 pointer-events-none"
-        style={{ top: "75%", transform: "translateY(-50%)", height: "12.5%" }}
-      >
-        <span className="bg-bg-primary px-2 py-0.5 rounded">RSI(14)</span>
-      </div>
-      <div
-        className="absolute left-0 right-0 text-center text-text-muted text-xs py-1 pointer-events-none"
-        style={{ top: "87.5%", transform: "translateY(-50%)", height: "12.5%" }}
-      >
-        <span className="bg-bg-primary px-2 py-0.5 rounded">KDJ(9,3,3)</span>
-      </div>
+      {showMACD && (
+        <div
+          className="absolute left-0 right-0 text-center text-text-muted text-xs py-1 pointer-events-none"
+          style={{ top: "60%", transform: "translateY(-50%)", height: "15%" }}
+        >
+          <span className="bg-bg-primary px-2 py-0.5 rounded">MACD(12,26,9)</span>
+        </div>
+      )}
+      {showRSI && (
+        <div
+          className="absolute left-0 right-0 text-center text-text-muted text-xs py-1 pointer-events-none"
+          style={{ top: "75%", transform: "translateY(-50%)", height: "12.5%" }}
+        >
+          <span className="bg-bg-primary px-2 py-0.5 rounded">RSI(14)</span>
+        </div>
+      )}
+      {showKDJ && (
+        <div
+          className="absolute left-0 right-0 text-center text-text-muted text-xs py-1 pointer-events-none"
+          style={{ top: "87.5%", transform: "translateY(-50%)", height: "12.5%" }}
+        >
+          <span className="bg-bg-primary px-2 py-0.5 rounded">KDJ(9,3,3)</span>
+        </div>
+      )}
     </div>
   );
 }
