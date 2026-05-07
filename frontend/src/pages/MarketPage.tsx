@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Star, TrendingUp, TrendingDown, Plus, X } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Star, TrendingUp, TrendingDown, Plus, X, Download, Upload } from 'lucide-react'
 import clsx from 'clsx'
 import type { StockInfo } from '../types'
 import { getRealtimeQuote } from '../services/yahooFinance'
@@ -48,7 +48,8 @@ function saveStoredStocks(stocks: StockInfo[]) {
 }
 
 export default function MarketPage() {
-  const { selectedStocks: storeSelectedStocks } = useStore()
+  const { selectedStocks: storeSelectedStocks, exportSelectedStocks, importSelectedStocks, showNotification } = useStore()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [activeTab, setActiveTab] = useState<TabType>('follow')
   const [followStocks, setFollowStocks] = useState<StockInfo[]>(getStoredStocks)
   const [marketStocks] = useState<StockInfo[]>(MARKET_STOCKS)
@@ -189,16 +190,61 @@ export default function MarketPage() {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const text = ev.target?.result as string;
+            const result = importSelectedStocks(text);
+            if (result.success) {
+              showNotification('success', `已导入 ${result.count} 只自选股`);
+            } else {
+              showNotification('error', `导入失败: ${result.error}`);
+            }
+          };
+          reader.readAsText(file);
+          e.target.value = ''; // reset
+        }}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">实时行情</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 bg-accent-primary text-bg-primary font-medium rounded-lg hover:bg-accent-primary/90 transition-colors text-sm flex items-center gap-2"
-        >
-          <Plus size={16} />
-          添加自选
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              exportSelectedStocks();
+              showNotification('success', '自选股已导出');
+            }}
+            className="px-3 py-2 text-sm text-text-muted hover:text-accent-primary flex items-center gap-1.5 border border-border-color rounded-lg hover:border-accent-primary/50 transition-colors"
+            title="导出自选股"
+          >
+            <Download size={14} />
+            导出
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-3 py-2 text-sm text-text-muted hover:text-accent-primary flex items-center gap-1.5 border border-border-color rounded-lg hover:border-accent-primary/50 transition-colors"
+            title="导入自选股"
+          >
+            <Upload size={14} />
+            导入
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2 bg-accent-primary text-bg-primary font-medium rounded-lg hover:bg-accent-primary/90 transition-colors text-sm flex items-center gap-2"
+          >
+            <Plus size={16} />
+            添加自选
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

@@ -37,6 +37,8 @@ interface AppState {
   // Stock selection results
   selectedStocks: StockInfo[];
   setSelectedStocks: (stocks: StockInfo[]) => void;
+  exportSelectedStocks: () => void;
+  importSelectedStocks: (json: string) => { success: boolean; count?: number; error?: string };
   aiReasoning: string;
   setAiReasoning: (reasoning: string) => void;
 
@@ -89,8 +91,46 @@ export const useStore = create<AppState>((set) => ({
   modelConfigs: [],
   setModelConfigs: (modelConfigs) => set({ modelConfigs }),
 
-  selectedStocks: [],
-  setSelectedStocks: (selectedStocks) => set({ selectedStocks }),
+  selectedStocks: (() => {
+    try {
+      const saved = localStorage.getItem('selectedStocks');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  })(),
+  setSelectedStocks: (selectedStocks) => {
+    try {
+      localStorage.setItem('selectedStocks', JSON.stringify(selectedStocks));
+    } catch {
+      // localStorage may be full or unavailable
+    }
+    set({ selectedStocks });
+  },
+  exportSelectedStocks: () => {
+    const stocks = (useStore.getState() as any).selectedStocks;
+    const json = JSON.stringify(stocks, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `自选股_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importSelectedStocks: (json: string) => {
+    try {
+      const stocks = JSON.parse(json);
+      if (Array.isArray(stocks)) {
+        localStorage.setItem('selectedStocks', JSON.stringify(stocks));
+        set({ selectedStocks: stocks });
+        return { success: true, count: stocks.length };
+      }
+      return { success: false, error: 'Invalid format' };
+    } catch {
+      return { success: false, error: 'Parse error' };
+    }
+  },
   aiReasoning: "",
   setAiReasoning: (aiReasoning) => set({ aiReasoning }),
 
