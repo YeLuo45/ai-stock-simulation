@@ -152,6 +152,7 @@ export async function getRealtimeQuote(symbol: string): Promise<{
   low: number;
   open: number;
   previousClose: number;
+  beta: number;
 }> {
   const normalized = normalizeSymbol(symbol);
   const url = `${BASE_URL}/${normalized}?interval=1d&range=1d`;
@@ -180,5 +181,6 @@ export async function getRealtimeQuote(symbol: string): Promise<{
     low: quotes?.low?.[quotes.low.length - 1] || meta.regularMarketDayLow || 0,
     open: quotes?.open?.[quotes.open.length - 1] || meta.regularMarketOpen || 0,
     previousClose: meta.chartPreviousClose || meta.previousClose || 0,
+    beta: meta.beta || 1,
   };
 }

@@ -1,5 +1,5 @@
 import { useStore } from '../store'
-import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff, Bell, BellOff, Trash2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff, Bell, BellOff, Trash2, Shield, Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
 import { useState, useCallback, Fragment, useEffect, useRef } from 'react'
@@ -14,6 +14,27 @@ export default function HomePage() {
   const [alertTargetPrice, setAlertTargetPrice] = useState('');
   const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
   const alertCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [riskMetrics, setRiskMetrics] = useState<{
+    totalValue: number;
+    totalCost: number;
+    totalProfitLoss: number;
+    totalProfitLossPct: number;
+    positionConcentration: number;
+    sharpeRatio: number;
+    beta: number;
+    dailyVaR: number;
+    loading: boolean;
+  }>({
+    totalValue: 0,
+    totalCost: 0,
+    totalProfitLoss: 0,
+    totalProfitLossPct: 0,
+    positionConcentration: 0,
+    sharpeRatio: 0,
+    beta: 1,
+    dailyVaR: 0,
+    loading: false,
+  });
 
   const handleToggleExpand = useCallback(async (stockCode: string) => {
     if (expandedPosition === stockCode) {
@@ -84,6 +105,65 @@ export default function HomePage() {
   const profitLoss = portfolio?.total_profit_loss ?? 0
   const profitLossPct = portfolio?.total_profit_loss_pct ?? 0
 
+  useEffect(() => {
+    if (!portfolio || positions.length === 0) return;
+    
+    const calculateRisk = async () => {
+      setRiskMetrics(prev => ({ ...prev, loading: true }));
+      
+      try {
+        const totalCost = positions.reduce((sum, p) => sum + (p.avg_cost * p.quantity), 0);
+        const totalValueCalc = positions.reduce((sum, p) => sum + (p.current_price * p.quantity), 0);
+        const totalProfitLoss = totalValueCalc - totalCost;
+        const totalProfitLossPct = totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0;
+        
+        const positionValues = positions.map(p => ({ symbol: p.symbol, value: p.current_price * p.quantity }));
+        const maxPositionValue = Math.max(...positionValues.map(p => p.value));
+        const positionConcentration = totalValueCalc > 0 ? (maxPositionValue / totalValueCalc) * 100 : 0;
+        
+        let portfolioBeta = 1;
+        
+        await Promise.allSettled(
+          positionValues.map(async (p) => {
+            try {
+              const quote = await getRealtimeQuote(p.symbol);
+              const weight = p.value / totalValueCalc;
+              portfolioBeta += (quote.beta - 1) * weight;
+            } catch {
+              // ignore
+            }
+          })
+        );
+        
+        const estimatedVolatility = 0.15 / Math.sqrt(positions.length);
+        const expectedReturn = totalProfitLossPct / 100;
+        const riskFreeRate = 0.03;
+        const sharpeRatio = estimatedVolatility > 0 
+          ? (expectedReturn - riskFreeRate) / estimatedVolatility 
+          : 0;
+        
+        const dailyVolatility = estimatedVolatility / Math.sqrt(252);
+        const dailyVaR = dailyVolatility * 1.645 * 100;
+        
+        setRiskMetrics({
+          totalValue: totalValueCalc,
+          totalCost,
+          totalProfitLoss,
+          totalProfitLossPct,
+          positionConcentration,
+          sharpeRatio,
+          beta: portfolioBeta,
+          dailyVaR,
+          loading: false,
+        });
+      } catch {
+        setRiskMetrics(prev => ({ ...prev, loading: false }));
+      }
+    };
+    
+    calculateRisk();
+  }, [portfolio, positions]);
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       {/* Page title */}
@@ -126,6 +206,73 @@ export default function HomePage() {
           icon={<Wallet size={20} className="text-accent-warning" />}
         />
       </div>
+
+      {positions.length > 0 && (
+        <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield size={16} className="text-accent-warning" />
+            <h3 className="text-sm font-semibold">风控仪表盘</h3>
+            {riskMetrics.loading && <Loader2 size={12} className="animate-spin text-text-muted" />}
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-bg-tertiary rounded-lg p-3">
+              <div className="text-xs text-text-muted mb-1">组合Beta</div>
+              <div className={`text-lg font-bold ${riskMetrics.beta > 1.2 ? 'text-accent-danger' : riskMetrics.beta < 0.8 ? 'text-accent-success' : 'text-text-primary'}`}>
+                {riskMetrics.beta.toFixed(2)}
+              </div>
+              <div className="text-[10px] text-text-muted">
+                {riskMetrics.beta > 1.2 ? '高波动' : riskMetrics.beta < 0.8 ? '低波动' : '适中'}
+              </div>
+            </div>
+            
+            <div className="bg-bg-tertiary rounded-lg p-3">
+              <div className="text-xs text-text-muted mb-1">夏普比率</div>
+              <div className={`text-lg font-bold ${riskMetrics.sharpeRatio >= 1 ? 'text-accent-success' : riskMetrics.sharpeRatio >= 0 ? 'text-accent-primary' : 'text-accent-danger'}`}>
+                {riskMetrics.sharpeRatio.toFixed(2)}
+              </div>
+              <div className="text-[10px] text-text-muted">
+                {riskMetrics.sharpeRatio >= 2 ? '优秀' : riskMetrics.sharpeRatio >= 1 ? '良好' : riskMetrics.sharpeRatio >= 0 ? '一般' : '较差'}
+              </div>
+            </div>
+            
+            <div className="bg-bg-tertiary rounded-lg p-3">
+              <div className="text-xs text-text-muted mb-1">持仓集中度</div>
+              <div className={`text-lg font-bold ${riskMetrics.positionConcentration > 50 ? 'text-accent-danger' : riskMetrics.positionConcentration > 30 ? 'text-accent-warning' : 'text-accent-success'}`}>
+                {riskMetrics.positionConcentration.toFixed(1)}%
+              </div>
+              <div className="text-[10px] text-text-muted">
+                {riskMetrics.positionConcentration > 50 ? '过于集中' : riskMetrics.positionConcentration > 30 ? '分散一般' : '分散良好'}
+              </div>
+            </div>
+            
+            <div className="bg-bg-tertiary rounded-lg p-3">
+              <div className="text-xs text-text-muted mb-1">日VaR (95%)</div>
+              <div className="text-lg font-bold text-accent-danger">
+                -{riskMetrics.dailyVaR.toFixed(2)}%
+              </div>
+              <div className="text-[10px] text-text-muted">
+                最大日损失估计
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-3 pt-3 border-t border-border-color">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-text-muted">当日盈亏</span>
+              <span className={riskMetrics.totalProfitLoss >= 0 ? 'text-accent-success' : 'text-accent-danger'}>
+                {riskMetrics.totalProfitLoss >= 0 ? '+' : ''}{riskMetrics.totalProfitLoss.toFixed(2)} ({riskMetrics.totalProfitLossPct >= 0 ? '+' : ''}{riskMetrics.totalProfitLossPct.toFixed(2)}%)
+              </span>
+            </div>
+            <div className="h-2 bg-bg-tertiary rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${riskMetrics.totalProfitLoss >= 0 ? 'bg-accent-success' : 'bg-accent-danger'}`}
+                style={{ width: `${Math.min(Math.abs(riskMetrics.totalProfitLossPct) * 5, 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Positions */}
       <div className="bg-bg-secondary rounded-xl border border-border-color p-5">
