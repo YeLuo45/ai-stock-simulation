@@ -317,6 +317,7 @@ export interface RunBatchBacktestOptions {
   start_date?: string;
   end_date?: string;
   initial_cash?: number;
+  strategy_type?: 'mean_reversion' | 'trend_following' | 'macd' | 'rsi' | 'value_investing';
   onProgress?: (progress: number) => void;
 }
 
@@ -345,7 +346,27 @@ export const runBatchBacktest = async (opts: RunBatchBacktestOptions): Promise<B
     const stock = findStock(sym);
     const basePrice = stock.price;
     const history = generatePriceHistory(basePrice, 252);
-    const result = meanReversionBacktest(history, initial_cash, {});
+    const strategyType = opts.strategy_type || 'mean_reversion';
+    let result: ReturnType<typeof meanReversionBacktest>;
+
+    switch (strategyType) {
+      case 'trend_following':
+        result = trendFollowingBacktest(history, initial_cash, { ma_short: 5, ma_long: 20 });
+        break;
+      case 'macd':
+        result = macdTrendBacktest(history, initial_cash, { macd_fast: 12, macd_slow: 26, macd_signal: 9 });
+        break;
+      case 'rsi':
+        result = rsiBacktest(history, initial_cash, { rsi_period: 14, overbought: 70, oversold: 30 });
+        break;
+      case 'value_investing':
+        result = valueInvestingBacktest(history, initial_cash, { rebalance_threshold: 0.1 });
+        break;
+      case 'mean_reversion':
+      default:
+        result = meanReversionBacktest(history, initial_cash, {});
+        break;
+    }
 
     results.results.push({
       symbol: sym,
@@ -355,6 +376,7 @@ export const runBatchBacktest = async (opts: RunBatchBacktestOptions): Promise<B
       max_drawdown: result.max_drawdown,
       win_rate: (result.win_rate || 0) * 100,
       trade_count: result.total_trades,
+      strategy_type: strategyType,
     });
     results.progress = (i + 1) / symbols.length;
     onProgress?.(results.progress);

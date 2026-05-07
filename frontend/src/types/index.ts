@@ -99,6 +99,7 @@ export interface BatchBacktestResult {
   max_drawdown: number;
   win_rate: number;
   trade_count: number;
+  strategy_type?: string;
 }
 
 export interface BatchBacktestResponse {

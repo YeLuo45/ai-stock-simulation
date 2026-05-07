@@ -34,6 +34,7 @@ export default function AnalysisPage() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
   const [batchResults, setBatchResults] = useState<BatchBacktestResult[]>([]);
+  const [selectedStrategyType, setSelectedStrategyType] = useState<string>('mean_reversion');
   const [sortField, setSortField] = useState<SortField>("totalReturn");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const cancelRef = useRef(false);
@@ -161,6 +162,7 @@ export default function AnalysisPage() {
         start_date: "2023-01-01",
         end_date: "2026-04-01",
         initial_cash: 1_000_000,
+        strategy_type: selectedStrategyType as any,
         onProgress: (p) => {
           setBatchProgress(p);
         },
@@ -647,6 +649,17 @@ export default function AnalysisPage() {
 
             {/* Run button */}
             <div className="flex gap-3">
+              <select
+                value={selectedStrategyType}
+                onChange={(e) => setSelectedStrategyType(e.target.value)}
+                className="px-3 py-2 bg-bg-secondary border border-border-color rounded-lg text-sm focus:outline-none focus:border-accent-primary"
+              >
+                <option value="mean_reversion">均线回归策略</option>
+                <option value="trend_following">趋势跟踪策略</option>
+                <option value="macd">MACD策略</option>
+                <option value="rsi">RSI策略</option>
+                <option value="value_investing">价值投资策略</option>
+              </select>
               <button
                 onClick={runBatchBacktestHandler}
                 disabled={batchRunning || selectedSymbols.length === 0}
