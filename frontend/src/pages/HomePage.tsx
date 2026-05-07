@@ -1,15 +1,19 @@
 import { useStore } from '../store'
-import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff, Bell, BellOff, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
-import { useState, useCallback, Fragment } from 'react'
-import { fetchFundamentalData } from '../services/yahooFinance'
+import { useState, useCallback, Fragment, useEffect, useRef } from 'react'
+import { fetchFundamentalData, getRealtimeQuote } from '../services/yahooFinance'
 
 export default function HomePage() {
-  const { portfolio, trades, isLoading, setPage } = useStore()
+  const { portfolio, trades, isLoading, setPage, priceAlerts, addPriceAlert, removePriceAlert, triggerAlert, showNotification } = useStore()
 
   const [expandedPosition, setExpandedPosition] = useState<string | null>(null);
   const [fundamentalCache, setFundamentalCache] = useState<Record<string, any>>({});
+  const [alertPanelPosition, setAlertPanelPosition] = useState<string | null>(null);
+  const [alertTargetPrice, setAlertTargetPrice] = useState('');
+  const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
+  const alertCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleToggleExpand = useCallback(async (stockCode: string) => {
     if (expandedPosition === stockCode) {
@@ -26,6 +30,46 @@ export default function HomePage() {
       }
     }
   }, [expandedPosition, fundamentalCache]);
+
+  // Price alert checking
+  const showNotificationRef = useRef(showNotification);
+  showNotificationRef.current = showNotification;
+
+  useEffect(() => {
+    if (priceAlerts.length === 0) return;
+    
+    const checkAlerts = async () => {
+      const activeAlerts = priceAlerts.filter(a => !a.triggered);
+      if (activeAlerts.length === 0) return;
+      
+      for (const alert of activeAlerts) {
+        try {
+          const quote = await getRealtimeQuote(alert.symbol);
+          const triggered = alert.condition === 'above' 
+            ? quote.price >= alert.targetPrice
+            : quote.price <= alert.targetPrice;
+          
+          if (triggered) {
+            triggerAlert(alert.id);
+            showNotificationRef.current(
+              'info',
+              `${alert.name} (${alert.symbol}) 触发预警：${alert.condition === 'above' ? '涨至' : '跌至'} ¥${quote.price.toFixed(2)}（设置价 ¥${alert.targetPrice.toFixed(2)}）`
+            );
+          }
+        } catch {
+          // silently fail
+        }
+      }
+    };
+    
+    // Check immediately once
+    checkAlerts();
+    // Then check every 30 seconds
+    alertCheckRef.current = setInterval(checkAlerts, 30000);
+    return () => {
+      if (alertCheckRef.current) clearInterval(alertCheckRef.current);
+    };
+  }, [priceAlerts, triggerAlert]);
 
   if (isLoading && !portfolio) {
     return (
@@ -146,6 +190,19 @@ export default function HomePage() {
                           >
                             {expandedPosition === pos.symbol ? <EyeOff size={14} /> : <Eye size={14} />}
                           </button>
+                          <button
+                            onClick={() => {
+                              setAlertPanelPosition(alertPanelPosition === pos.symbol ? null : pos.symbol);
+                              setAlertTargetPrice('');
+                              setAlertCondition('above');
+                            }}
+                            className="ml-1 text-text-muted hover:text-accent-warning"
+                            title="价格预警"
+                          >
+                            {priceAlerts.some(a => a.symbol === pos.symbol && !a.triggered) 
+                              ? <Bell size={14} className="text-accent-warning" /> 
+                              : <BellOff size={14} />}
+                          </button>
                         </td>
                       </tr>
                       {(expandedPosition === pos.symbol && fundamentalCache[pos.symbol]) && (
@@ -160,6 +217,71 @@ export default function HomePage() {
                               <FundamentalItem label="52W低" value={fundamentalCache[pos.symbol].week52Low?.toFixed(2) ?? '-'} />
                               <FundamentalItem label="EPS" value={fundamentalCache[pos.symbol].eps?.toFixed(2) ?? '-'} />
                               <FundamentalItem label="Beta" value={fundamentalCache[pos.symbol].beta?.toFixed(2) ?? '-'} />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {alertPanelPosition === pos.symbol && (
+                        <tr>
+                          <td colSpan={6} className="py-3 px-2">
+                            <div className="mt-3 pt-3 border-t border-border-color space-y-3">
+                              <div className="flex items-center gap-2 text-xs font-medium text-text-secondary">
+                                <Bell size={12} />
+                                价格预警
+                              </div>
+                              <div className="flex gap-2">
+                                <select
+                                  value={alertCondition}
+                                  onChange={(e) => setAlertCondition(e.target.value as 'above' | 'below')}
+                                  className="px-2 py-1 text-xs bg-bg-tertiary border border-border-color rounded"
+                                >
+                                  <option value="above">涨到</option>
+                                  <option value="below">跌到</option>
+                                </select>
+                                <input
+                                  type="number"
+                                  value={alertTargetPrice}
+                                  onChange={(e) => setAlertTargetPrice(e.target.value)}
+                                  placeholder="目标价"
+                                  className="flex-1 px-2 py-1 text-xs bg-bg-tertiary border border-border-color rounded"
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (!alertTargetPrice) return;
+                                    addPriceAlert({
+                                      id: `alert-${Date.now()}-${pos.symbol}`,
+                                      symbol: pos.symbol,
+                                      name: pos.name || pos.symbol,
+                                      targetPrice: parseFloat(alertTargetPrice),
+                                      condition: alertCondition,
+                                      triggered: false,
+                                      createdAt: new Date().toISOString(),
+                                    });
+                                    setAlertPanelPosition(null);
+                                    showNotification('success', `已设置预警：${pos.symbol} ${alertCondition === 'above' ? '涨到' : '跌到'} ¥${alertTargetPrice}`);
+                                  }}
+                                  className="px-3 py-1 text-xs bg-accent-primary text-bg-primary rounded hover:bg-accent-primary/90"
+                                >
+                                  确认
+                                </button>
+                              </div>
+                              {/* 已有预警列表 */}
+                              {priceAlerts.filter(a => a.symbol === pos.symbol).map(alert => (
+                                <div key={alert.id} className="flex items-center gap-2 text-xs">
+                                  <span className={alert.triggered ? 'text-accent-success line-through' : 'text-text-muted'}>
+                                    {alert.condition === 'above' ? '涨到' : '跌到'} ¥{alert.targetPrice.toFixed(2)}
+                                  </span>
+                                  {alert.triggered && <span className="text-accent-success text-[10px]">已触发</span>}
+                                  {!alert.triggered && (
+                                    <button
+                                      onClick={() => removePriceAlert(alert.id)}
+                                      className="ml-auto text-text-muted hover:text-accent-danger"
+                                    >
+                                      <Trash2 size={10} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </td>
                         </tr>

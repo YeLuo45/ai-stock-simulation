@@ -4,6 +4,16 @@
 import { create } from "zustand";
 import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool } from "../types";
 
+export interface PriceAlert {
+  id: string;
+  symbol: string;
+  name: string;
+  targetPrice: number;
+  condition: 'above' | 'below';  // above=涨到，below=跌到
+  triggered: boolean;
+  createdAt: string;
+}
+
 interface AppState {
   // Navigation
   currentPage: Page;
@@ -46,6 +56,12 @@ interface AppState {
   deleteStockPool: (id: string) => void;
   activePoolId: string | null;
   setActivePoolId: (id: string | null) => void;
+
+  // Price Alerts
+  priceAlerts: PriceAlert[];
+  addPriceAlert: (alert: PriceAlert) => void;
+  removePriceAlert: (id: string) => void;
+  triggerAlert: (id: string) => void;
 
   // Loading states
   isLoading: boolean;
@@ -95,6 +111,17 @@ export const useStore = create<AppState>((set) => ({
   })),
   activePoolId: null,
   setActivePoolId: (activePoolId) => set({ activePoolId }),
+
+  priceAlerts: [],
+  addPriceAlert: (alert) => set((state) => ({
+    priceAlerts: [...state.priceAlerts, alert],
+  })),
+  removePriceAlert: (id) => set((state) => ({
+    priceAlerts: state.priceAlerts.filter(a => a.id !== id),
+  })),
+  triggerAlert: (id) => set((state) => ({
+    priceAlerts: state.priceAlerts.map(a => a.id === id ? { ...a, triggered: true } : a),
+  })),
 
   isLoading: false,
   setLoading: (isLoading) => set({ isLoading }),
