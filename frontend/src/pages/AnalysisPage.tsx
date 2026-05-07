@@ -25,7 +25,7 @@ export default function AnalysisPage() {
   const [chartData, setChartData] = useState<OHLCV[]>([]);
   const [poolDropdownOpen, setPoolDropdownOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"search" | "pool">("search");
-  const [klinePeriod, setKlinePeriod] = useState<"daily" | "weekly">("daily");
+  const [klinePeriod, setKlinePeriod] = useState<"daily" | "weekly" | "monthly">("daily");
 
   // Batch backtest state
   const [batchMode, setBatchMode] = useState(false);
@@ -483,6 +483,16 @@ export default function AnalysisPage() {
                 }`}
               >
                 周K
+              </button>
+              <button
+                onClick={() => setKlinePeriod("monthly")}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  klinePeriod === "monthly"
+                    ? "bg-accent-primary text-bg-primary"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                月K
               </button>
             </div>
           </div>

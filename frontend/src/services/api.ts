@@ -552,7 +552,7 @@ export interface KLineData {
 }
 
 export interface GetKlineOptions {
-  period?: "daily" | "weekly";
+  period?: "daily" | "weekly" | "monthly";
   start_date?: string;
   end_date?: string;
   use_cache?: boolean;
@@ -575,7 +575,8 @@ export const getKlineData = async (symbol: string, options: GetKlineOptions = {}
   const isRealCode = /^\d{6}$/.test(symbol) || symbol.includes('.');
   if (isRealCode) {
     try {
-      const history = await fetchKlineData(symbol, 120);
+      const intervalMap = { daily: '1d', weekly: '1wk', monthly: '1mo' } as const;
+      const history = await fetchKlineData(symbol, 300, intervalMap[period]);
       return {
         data: history.map((h) => ({
           date: h.date,
