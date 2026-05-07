@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { runBacktest, getBacktestResults, explainBacktest } from '../services/api'
-import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Download } from 'lucide-react'
+import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Download, FileText } from 'lucide-react'
 import { toCSV, downloadCSV } from '../utils/export'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
@@ -16,6 +16,7 @@ export default function BacktestPage() {
   const [startDate, setStartDate] = useState('2023-01-01')
   const [endDate, setEndDate] = useState('2024-12-31')
   const [initialCash, setInitialCash] = useState(1000000)
+  const [reportMode, setReportMode] = useState(false)
 
   const handleRun = async () => {
     setRunning(true)
@@ -46,6 +47,12 @@ export default function BacktestPage() {
     } catch (err) {
       showNotification('error', '解读失败')
     }
+  }
+
+  const handleGenerateReport = () => {
+    if (!results) return
+    setReportMode(true)
+    setTimeout(() => window.print(), 100)
   }
 
   const handleExportEquityCSV = () => {
@@ -218,6 +225,13 @@ export default function BacktestPage() {
                 >
                   AI解读
                 </button>
+                <button
+                  onClick={handleGenerateReport}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-accent-secondary text-bg-primary font-medium rounded-lg hover:bg-accent-secondary/90 transition-colors text-sm"
+                >
+                  <FileText size={16} />
+                  生成报告
+                </button>
               </div>
             </div>
             <div className="h-64">
@@ -290,6 +304,106 @@ export default function BacktestPage() {
           <BarChart2 size={64} className="mx-auto mb-4 text-text-muted opacity-30" />
           <p className="text-text-muted text-lg mb-2">配置策略参数开始回测</p>
           <p className="text-text-muted text-sm">回测将使用历史行情数据验证策略有效性</p>
+        </div>
+      )}
+
+      {/* Report Mode */}
+      {reportMode && results && (
+        <div className="print:!block print:bg-white print:p-8">
+          {/* Report header */}
+          <div className="text-center border-b border-gray-300 pb-4 mb-6 print:border-black">
+            <h1 className="text-2xl font-bold print:text-black">量化回测报告</h1>
+            <p className="text-sm text-text-muted print:text-black mt-1">
+              {results.strategy_name} · {new Date().toLocaleDateString('zh-CN')} 生成
+            </p>
+          </div>
+
+          {/* Key metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: '总收益率', value: `${(results.total_return * 100).toFixed(2)}%`, color: results.total_return >= 0 ? 'text-green-600' : 'text-red-600' },
+              { label: '年化收益率', value: `${(results.annual_return * 100).toFixed(2)}%`, color: results.annual_return >= 0 ? 'text-green-600' : 'text-red-600' },
+              { label: '最大回撤', value: `${(results.max_drawdown * 100).toFixed(2)}%`, color: 'text-red-600' },
+              { label: '夏普比率', value: results.sharpe_ratio.toFixed(2), color: 'text-blue-600' },
+              { label: '胜率', value: `${(results.win_rate * 100).toFixed(1)}%`, color: 'text-blue-600' },
+              { label: '总交易次数', value: String(results.total_trades), color: 'text-black' },
+            ].map(item => (
+              <div key={item.label} className="bg-gray-50 print:bg-gray-100 rounded-lg p-3 text-center border border-gray-200 print:border-black">
+                <div className="text-xs text-gray-500 print:text-black mb-1">{item.label}</div>
+                <div className={`text-lg font-bold ${item.color} print:text-black`}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Equity curve */}
+          <div className="mb-6">
+            <h2 className="text-base font-semibold mb-3 print:text-black border-b border-gray-200 print:border-black pb-2">资金曲线</h2>
+            <div className="h-48 print:h-40">
+              <LineChart data={results.equity_curve} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} />
+              </LineChart>
+            </div>
+          </div>
+
+          {/* Trades summary */}
+          {(results as any).trades && (results as any).trades.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-base font-semibold mb-3 print:text-black border-b border-gray-200 print:border-black pb-2">交易记录</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs print:text-black">
+                  <thead>
+                    <tr className="border-b border-gray-200 print:border-black">
+                      <th className="text-left py-1">日期</th>
+                      <th className="text-left py-1">股票</th>
+                      <th className="text-left py-1">操作</th>
+                      <th className="text-right py-1">价格</th>
+                      <th className="text-right py-1">数量</th>
+                      <th className="text-right py-1">金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(results as any).trades.slice(0, 50).map((t: any, i: number) => (
+                      <tr key={i} className="border-b border-gray-100 print:border-black">
+                        <td className="py-1">{t.date || '-'}</td>
+                        <td className="py-1">{t.symbol || t.stock_code || '-'}</td>
+                        <td className="py-1">
+                          <span className={t.type === 'buy' ? 'text-green-600' : 'text-red-600'}>
+                            {t.type === 'buy' ? '买入' : '卖出'}
+                          </span>
+                        </td>
+                        <td className="text-right py-1">{t.price?.toFixed(2) ?? '-'}</td>
+                        <td className="text-right py-1">{t.quantity ?? '-'}</td>
+                        <td className="text-right py-1">
+                          {t.price && t.quantity ? (t.price * t.quantity).toFixed(2) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {(results as any).trades.length > 50 && (
+                  <p className="text-xs text-text-muted mt-2 print:text-black">（显示前50条，共{(results as any).trades.length}条）</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Report footer */}
+          <div className="text-center text-xs text-text-muted print:text-black mt-8 pt-4 border-t border-gray-200 print:border-black">
+            由 ai-stock-simulation 生成 · {new Date().toLocaleString('zh-CN')}
+          </div>
+
+          {/* Close button (not printed) */}
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => setReportMode(false)}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm print:hidden"
+            >
+              关闭报告
+            </button>
+          </div>
         </div>
       )}
     </div>

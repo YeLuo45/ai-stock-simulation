@@ -106,3 +106,53 @@ input::placeholder, textarea::placeholder {
     linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
+
+/* Print styles for backtest report */
+@media print {
+  /* Hide all non-report content */
+  body > *:not(.print\:block) {
+    display: none !important;
+  }
+
+  /* Report styles */
+  .print\:block {
+    display: block !important;
+  }
+
+  .print\:text-black {
+    color: black !important;
+  }
+
+  .print\:bg-white {
+    background-color: white !important;
+  }
+
+  .print\:bg-gray-100 {
+    background-color: #f5f5f5 !important;
+  }
+
+  .print\:border-black {
+    border-color: black !important;
+  }
+
+  .print\:p-8 {
+    padding: 2rem !important;
+  }
+
+  .print\:h-40 {
+    height: 10rem !important;
+  }
+
+  .print\:border-b {
+    border-bottom-width: 1px !important;
+  }
+
+  .print\:border-t {
+    border-top-width: 1px !important;
+  }
+
+  /* Hide close button when printing */
+  button.print\:hidden {
+    display: none !important;
+  }
+}
