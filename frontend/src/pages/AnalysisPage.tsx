@@ -9,7 +9,8 @@ import { generatePriceHistory } from "../services/indicators";
 import type { OHLCV } from "../services/indicators";
 import type { TechnicalAnalysis, StockInfo, StockPool, BatchBacktestResult } from "../types";
 import KLineChart from "../components/KLineChart";
-import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play, FileText, FileSpreadsheet, FileDown } from "lucide-react";
+import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play, FileText, FileSpreadsheet, FileDown, Download } from "lucide-react";
+import { toCSV, downloadCSV } from "../utils/export";
 
 type SortField = "totalReturn" | "sharpeRatio" | "maxDrawdown" | "winRate" | "tradeCount";
 type SortDir = "asc" | "desc";
@@ -306,6 +307,36 @@ export default function AnalysisPage() {
     }
   };
 
+  const handleExportKline = useCallback(() => {
+    if (chartData.length === 0) {
+      showNotification('error', '暂无K线数据可导出');
+      return;
+    }
+
+    const data = chartData.map(k => ({
+      日期: k.date,
+      开盘: k.open?.toFixed(2) ?? '',
+      最高: k.high?.toFixed(2) ?? '',
+      最低: k.low?.toFixed(2) ?? '',
+      收盘: k.close?.toFixed(2) ?? '',
+      成交量: k.volume ?? '',
+    }));
+
+    const columns = [
+      { key: '日期' as keyof typeof data[0], header: '日期' },
+      { key: '开盘' as keyof typeof data[0], header: '开盘价' },
+      { key: '最高' as keyof typeof data[0], header: '最高价' },
+      { key: '最低' as keyof typeof data[0], header: '最低价' },
+      { key: '收盘' as keyof typeof data[0], header: '收盘价' },
+      { key: '成交量' as keyof typeof data[0], header: '成交量' },
+    ];
+
+    const csv = toCSV(data as any, columns);
+    const filename = symbol ? `K线_${symbol}_${chartData[0]?.date ?? ''}_${chartData[chartData.length - 1]?.date ?? ''}.csv` : `K线_${Date.now()}.csv`;
+    downloadCSV(csv, filename);
+    showNotification('success', `已导出 ${data.length} 条K线数据`);
+  }, [chartData, symbol, showNotification]);
+
   const SortIcon = ({ field }: { field: SortField }) => (
     <ArrowUpDown
       size={12}
@@ -495,6 +526,15 @@ export default function AnalysisPage() {
                 月K
               </button>
             </div>
+
+            <button
+              onClick={handleExportKline}
+              className="flex items-center gap-1 px-3 py-1.5 text-text-secondary hover:text-accent-primary transition-colors text-xs"
+              title="导出K线数据"
+            >
+              <Download size={14} />
+              导出
+            </button>
           </div>
         )}
 
