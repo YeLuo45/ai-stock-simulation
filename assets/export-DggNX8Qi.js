@@ -1,0 +1,2 @@
+function l(n,t){const c=t.map(e=>`"${e.header}"`).join(","),o=n.map(e=>t.map(a=>{const r=e[a.key];return`"${(r==null?"":String(r)).replace(/"/g,'""')}"`}).join(","));return[c,...o].join(`
+`)}function s(n,t){const c=new Blob(["\uFEFF"+n],{type:"text/csv;charset=utf-8;"}),o=URL.createObjectURL(c),e=document.createElement("a");e.href=o,e.download=t,document.body.appendChild(e),e.click(),document.body.removeChild(e),URL.revokeObjectURL(o)}export{s as d,l as t};
