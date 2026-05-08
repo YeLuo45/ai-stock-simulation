@@ -16,6 +16,7 @@ import CapitalFlowPage from './pages/CapitalFlowPage'
 import ContestPage from './pages/ContestPage'
 import PortfolioOptimizerPage from './pages/PortfolioOptimizerPage'
 import EvolutionPage from './pages/EvolutionPage'
+import MemoryReviewPage from './pages/MemoryReviewPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -71,6 +72,8 @@ function App() {
         return <PortfolioOptimizerPage />
       case 'evolution':
         return <EvolutionPage />
+      case 'memory':
+        return <MemoryReviewPage />
       default:
         return <HomePage />
     }

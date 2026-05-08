@@ -157,7 +157,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory";
 
 // ============== Stock Pool ==============
 
@@ -419,5 +419,35 @@ export interface SavedStrategy {
   technical?: TechnicalCriteria;
   sentiment?: SentimentCriteria;
   created_at: string;
+}
+
+// ============== Memory / Notes ==============
+
+export type MemoryType = "insight" | "note" | "trade_log" | "analysis" | "idea";
+
+export interface MemoryTag {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export interface MemoryEntry {
+  id: string;
+  type: MemoryType;
+  title: string;
+  content: string;
+  tags: string[];
+  symbol?: string;       // associated stock symbol
+  created_at: string;
+  updated_at: string;
+  is_pinned?: boolean;
+  is_favorite?: boolean;
+}
+
+export interface MemoryStats {
+  total: number;
+  byType: Record<MemoryType, number>;
+  recentCount: number;
+  favoriteCount: number;
 }
 

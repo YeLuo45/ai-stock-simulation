@@ -7,14 +7,15 @@ import { useState, useEffect } from "react";
 import { useStore } from "../store";
 import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } from "../services/api";
 import type { StockInfo } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain } from "lucide-react";
 import clsx from "clsx";
+import MemoryReviewPage from "./MemoryReviewPage";
 
 const PAGE_SIZE = 10;
 
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount } = useStore();
-  const [tab, setTab] = useState<"positions" | "trade" | "history">("positions");
+  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -699,6 +700,7 @@ export default function TradingPage() {
             { key: "positions" as const, label: "持仓", icon: <Briefcase size={14} /> },
             { key: "trade" as const, label: "交易", icon: <ArrowUpDown size={14} /> },
             { key: "history" as const, label: "历史", icon: <History size={14} /> },
+            { key: "memory" as const, label: "记忆", icon: <Brain size={14} /> },
           ]).map(tabItem => (
             <button
               key={tabItem.key}
@@ -721,6 +723,7 @@ export default function TradingPage() {
           {tab === "positions" && renderPositions()}
           {tab === "trade" && renderTradeForm()}
           {tab === "history" && renderHistory()}
+          {tab === "memory" && <MemoryReviewPage />}
         </div>
       </div>
     </div>

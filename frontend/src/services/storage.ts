@@ -2,7 +2,7 @@
  * localStorage persistence layer for pure frontend mode
  * Replaces backend SQLite storage
  */
-import type { Portfolio, Trade, BacktestResponse, AIModelConfig, DataSourceResponse, AIModelPriorityResponse, StockInfo } from "../types";
+import type { Portfolio, Trade, BacktestResponse, AIModelConfig, DataSourceResponse, AIModelPriorityResponse, StockInfo, MemoryEntry, MemoryType } from "../types";
 
 // Storage keys
 const KEYS = {
@@ -199,4 +199,113 @@ export function getCurrentAccountId(): number {
 
 export function setCurrentAccountId(id: number): void {
   save(KEYS.CURRENT_ACCOUNT_ID, id);
+}
+
+// ============== Memory / Notes ==============
+
+const KEY_MEMORY = "ai-stock-memory";
+
+const DEFAULT_MEMORY_TAGS: Record<MemoryType, { label: string; color: string }> = {
+  insight: { label: "💡 灵感", color: "#f59e0b" },
+  note: { label: "📝 笔记", color: "#3b82f6" },
+  trade_log: { label: "📋 交易记录", color: "#10b981" },
+  analysis: { label: "📊 分析", color: "#8b5cf6" },
+  idea: { label: "💭 想法", color: "#ec4899" },
+};
+
+export const MEMORY_TYPE_META = DEFAULT_MEMORY_TAGS;
+
+function getDefaultMemory(): MemoryEntry[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: "mem-demo-1",
+      type: "insight",
+      title: "平安银行低估值观察",
+      content: "PB仅0.92，低于行业平均，安全边际较高。可考虑在10元以下分批建仓。",
+      tags: ["低估", "银行", "价值投资"],
+      symbol: "000001",
+      created_at: now,
+      updated_at: now,
+      is_pinned: true,
+    },
+    {
+      id: "mem-demo-2",
+      type: "analysis",
+      title: "贵州茅台技术面分析",
+      content: "当前处于震荡区间，MA60形成支撑。MACD出现金叉信号，短期偏多。",
+      tags: ["技术分析", "MACD", "白酒"],
+      symbol: "600519",
+      created_at: now,
+      updated_at: now,
+      is_favorite: true,
+    },
+    {
+      id: "mem-demo-3",
+      type: "trade_log",
+      title: "买入宁德时代",
+      content: "以185.5元买入500股，仓位占比约9%。止损设在170元，止盈目标220元。",
+      tags: ["买入", "宁德时代", "新能源"],
+      symbol: "300750",
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: "mem-demo-4",
+      type: "idea",
+      title: "科创板半导体机会",
+      content: "中芯国际调整较为充分，国产替代逻辑持续，可关注48-50元区间机会。",
+      tags: ["科创板", "半导体", "中芯国际"],
+      symbol: "688981",
+      created_at: now,
+      updated_at: now,
+    },
+  ];
+}
+
+export function getMemoryEntries(): MemoryEntry[] {
+  return load<MemoryEntry[]>(KEY_MEMORY, getDefaultMemory());
+}
+
+export function saveMemoryEntries(entries: MemoryEntry[]): void {
+  save(KEY_MEMORY, entries);
+}
+
+export function addMemoryEntry(entry: MemoryEntry): void {
+  const entries = getMemoryEntries();
+  entries.unshift(entry);
+  save(KEY_MEMORY, entries);
+}
+
+export function updateMemoryEntry(id: string, updates: Partial<MemoryEntry>): void {
+  const entries = getMemoryEntries();
+  const idx = entries.findIndex(e => e.id === id);
+  if (idx >= 0) {
+    entries[idx] = { ...entries[idx], ...updates, updated_at: new Date().toISOString() };
+    save(KEY_MEMORY, entries);
+  }
+}
+
+export function deleteMemoryEntry(id: string): void {
+  const entries = getMemoryEntries().filter(e => e.id !== id);
+  save(KEY_MEMORY, entries);
+}
+
+export function getMemoryEntriesBySymbol(symbol: string): MemoryEntry[] {
+  return getMemoryEntries().filter(e => e.symbol === symbol);
+}
+
+export function getMemoryStats() {
+  const entries = getMemoryEntries();
+  const types: MemoryType[] = ["insight", "note", "trade_log", "analysis", "idea"];
+  const byType = {} as Record<MemoryType, number>;
+  types.forEach(t => { byType[t] = 0; });
+  entries.forEach(e => { byType[e.type] = (byType[e.type] || 0) + 1; });
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return {
+    total: entries.length,
+    byType,
+    recentCount: entries.filter(e => e.created_at >= sevenDaysAgo).length,
+    favoriteCount: entries.filter(e => e.is_favorite).length,
+  };
 }
