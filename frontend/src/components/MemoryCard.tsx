@@ -14,6 +14,7 @@ const TYPE_ICONS: Record<MemoryType, string> = {
   trade_log: "📋",
   analysis: "📊",
   idea: "💭",
+  trade_decision: "🤖",
 };
 
 function formatDate(isoString: string): string {

@@ -8,9 +8,19 @@ import { useStore } from "../store";
 import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download, PieChart, List } from "lucide-react";
 import clsx from "clsx";
 import OutcomeBadge from "../components/OutcomeBadge";
-import { computeMemoryStats, type MemoryStatsData } from "../services/memoryService";
 import { getMemoryEntries } from "../services/storage";
-import { PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+
+interface MemoryStatsData {
+  total: number;
+  pending: number;
+  profit: number;
+  loss: number;
+  stopLoss: number;
+  takeProfit: number;
+  avgHoldingDays: number;
+  winRate: number;
+  factorStats: Record<string, { total: number; wins: number; winRate: number }>;
+}
 
 export interface MemoryEntry {
   id: string;
@@ -67,7 +77,7 @@ export default function MemoryReviewPage() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [viewTab, setViewTab] = useState<"list" | "stats">("list");
-  const [stats, setStats] = useState<MemoryStatsData | null>(null);
+  const [_stats, setStats] = useState<MemoryStatsData|null>(null);
 
   const loadEntries = () => {
     const data = loadMemoryEntries();

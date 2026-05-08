@@ -9,12 +9,14 @@ export default defineConfig({
     port: 3100,
   },
   build: {
+    chunkSizeWarningLimit: 300,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-charts': ['recharts'],
-          'vendor-lucide': ['lucide-react'],
+        manualChunks(id) {
+          if (id.includes('node_modules/recharts')) return 'vendor-recharts';
+          if (id.includes('node_modules/lightweight-charts')) return 'vendor-charts-light';
+          if (id.includes('node_modules/lucide-react')) return 'vendor-lucide';
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) return 'vendor-react';
         }
       }
     }

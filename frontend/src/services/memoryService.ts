@@ -32,7 +32,7 @@ export function calculateDecisionFactors(position: Position, history: OHLCV[]): 
   const closes = history.map(h => h.close);
   const latest = closes[closes.length - 1];
   const rsi = calculateRSI(closes, 14);
-  const { MA5, MA10, MA20 } = calculateMA(closes);
+  const { MA5, MA20 } = calculateMA(closes);
   const { MACD, MACD_SIGNAL } = calculateMACD(closes);
 
   // RSI factors
