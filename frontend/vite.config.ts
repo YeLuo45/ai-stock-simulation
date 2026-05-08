@@ -8,4 +8,15 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 3100,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-charts': ['recharts'],
+          'vendor-lucide': ['lucide-react'],
+        }
+      }
+    }
+  }
 })

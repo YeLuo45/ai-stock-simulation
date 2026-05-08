@@ -1,27 +1,28 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { useStore } from './store'
 import NavHeader from './components/NavHeader'
-import HomePage from './pages/HomePage'
-import SelectionPage from './pages/SelectionPage'
-import BacktestPage from './pages/BacktestPage'
-import BacktestComparePage from './pages/BacktestComparePage'
-import TradingPage from './pages/TradingPage'
-import AnalysisPage from './pages/AnalysisPage'
-import SettingsPage from './pages/SettingsPage'
-import IPOEvaluationPage from './pages/IPOEvaluationPage'
-import StockPoolPage from './pages/StockPoolPage'
-import OptimizePage from './pages/OptimizePage'
-import StrategyBuilderPage from './pages/StrategyBuilderPage'
-import MarketPage from './pages/MarketPage'
-import CapitalFlowPage from './pages/CapitalFlowPage'
-import ContestPage from './pages/ContestPage'
-import PortfolioOptimizerPage from './pages/PortfolioOptimizerPage'
-import EvolutionPage from './pages/EvolutionPage'
-import MemoryReviewPage from './pages/MemoryReviewPage'
-import FactorEditorPage from './pages/FactorEditorPage'
-import StrategyMarketPage from './pages/StrategyMarketPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
+
+const HomePage = lazy(() => import('./pages/HomePage'))
+const SelectionPage = lazy(() => import('./pages/SelectionPage'))
+const BacktestPage = lazy(() => import('./pages/BacktestPage'))
+const BacktestComparePage = lazy(() => import('./pages/BacktestComparePage'))
+const TradingPage = lazy(() => import('./pages/TradingPage'))
+const AnalysisPage = lazy(() => import('./pages/AnalysisPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const IPOEvaluationPage = lazy(() => import('./pages/IPOEvaluationPage'))
+const StockPoolPage = lazy(() => import('./pages/StockPoolPage'))
+const OptimizePage = lazy(() => import('./pages/OptimizePage'))
+const StrategyBuilderPage = lazy(() => import('./pages/StrategyBuilderPage'))
+const MarketPage = lazy(() => import('./pages/MarketPage'))
+const CapitalFlowPage = lazy(() => import('./pages/CapitalFlowPage'))
+const ContestPage = lazy(() => import('./pages/ContestPage'))
+const PortfolioOptimizerPage = lazy(() => import('./pages/PortfolioOptimizerPage'))
+const EvolutionPage = lazy(() => import('./pages/EvolutionPage'))
+const MemoryReviewPage = lazy(() => import('./pages/MemoryReviewPage'))
+const FactorEditorPage = lazy(() => import('./pages/FactorEditorPage'))
+const StrategyMarketPage = lazy(() => import('./pages/StrategyMarketPage'))
 
 function App() {
   const { currentPage, setPortfolio, setLoading, showNotification } = useStore()
@@ -92,7 +93,9 @@ function App() {
     <div className="min-h-screen bg-bg-primary grid-pattern">
       <NavHeader />
       <main className="container mx-auto px-4 py-6 max-w-7xl">
-        {renderPage()}
+        <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="text-text-muted">加载中...</div></div>}>
+          {renderPage()}
+        </Suspense>
       </main>
       <Notification />
     </div>
