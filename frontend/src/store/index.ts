@@ -14,6 +14,24 @@ export interface PriceAlert {
   createdAt: string;
 }
 
+// ============== Strategy Market ==============
+
+export interface SubscribedStrategy {
+  id: string;
+  strategy_id: string;
+  name: string;
+  category: import("../types").StrategyCategory;
+  subscribed_at: string;
+  status: 'active' | 'cancelled';
+  config_snapshot?: {
+    entry_conditions: string[];
+    exit_conditions: string[];
+    position_size: number;
+    stop_loss: number;
+    take_profit: number;
+  };
+}
+
 interface AppState {
   // Navigation
   currentPage: Page;
@@ -73,6 +91,12 @@ interface AppState {
   addPriceAlert: (alert: PriceAlert) => void;
   removePriceAlert: (id: string) => void;
   triggerAlert: (id: string) => void;
+
+  // Strategy Market
+  subscribedStrategies: SubscribedStrategy[];
+  addSubscribedStrategy: (strategy: SubscribedStrategy) => void;
+  removeSubscribedStrategy: (id: string) => void;
+  updateSubscribedStrategy: (id: string, update: Partial<SubscribedStrategy>) => void;
 
   // Loading states
   isLoading: boolean;
@@ -217,6 +241,30 @@ export const useStore = create<AppState>((set) => ({
   triggerAlert: (id) => set((state) => ({
     priceAlerts: state.priceAlerts.map(a => a.id === id ? { ...a, triggered: true } : a),
   })),
+
+  subscribedStrategies: (() => {
+    try {
+      const saved = localStorage.getItem('strategy-subscriptions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  })(),
+  addSubscribedStrategy: (strategy) => set((state) => {
+    const newList = [...state.subscribedStrategies, strategy];
+    try { localStorage.setItem('strategy-subscriptions', JSON.stringify(newList)); } catch {}
+    return { subscribedStrategies: newList };
+  }),
+  removeSubscribedStrategy: (id) => set((state) => {
+    const newList = state.subscribedStrategies.filter(s => s.id !== id);
+    try { localStorage.setItem('strategy-subscriptions', JSON.stringify(newList)); } catch {}
+    return { subscribedStrategies: newList };
+  }),
+  updateSubscribedStrategy: (id, update) => set((state) => {
+    const newList = state.subscribedStrategies.map(s => s.id === id ? { ...s, ...update } : s);
+    try { localStorage.setItem('strategy-subscriptions', JSON.stringify(newList)); } catch {}
+    return { subscribedStrategies: newList };
+  }),
 
   isLoading: false,
   setLoading: (isLoading) => set({ isLoading }),

@@ -18,6 +18,7 @@ import PortfolioOptimizerPage from './pages/PortfolioOptimizerPage'
 import EvolutionPage from './pages/EvolutionPage'
 import MemoryReviewPage from './pages/MemoryReviewPage'
 import FactorEditorPage from './pages/FactorEditorPage'
+import StrategyMarketPage from './pages/StrategyMarketPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -75,6 +76,8 @@ function App() {
         return <EvolutionPage />
       case 'factor_editor':
         return <FactorEditorPage />
+      case 'strategy_market':
+        return <StrategyMarketPage />
       case 'memory':
         return <MemoryReviewPage />
       default:

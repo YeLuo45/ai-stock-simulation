@@ -1,13 +1,14 @@
 import { useStore } from '../store'
 import { getPortfolio } from '../services/api'
 import { useState, useEffect } from 'react'
-import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, Layers, Settings2, Sparkles, Activity, DollarSign, Trophy, PieChart, Dna, Brain, Sliders } from 'lucide-react'
+import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, Layers, Settings2, Sparkles, Activity, DollarSign, Trophy, PieChart, Dna, Brain, Sliders, Store } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page } from '../types'
 
 const NAV_ITEMS: { key: Page; label: string; icon: React.ReactNode }[] = [
   { key: 'home', label: '首页', icon: <TrendingUp size={18} /> },
   { key: 'market', label: '行情', icon: <Activity size={18} /> },
+  { key: 'strategy_market', label: '策略市场', icon: <Store size={18} /> },
   { key: 'capitalflow', label: '资金流向', icon: <DollarSign size={18} /> },
   { key: 'selection', label: 'AI选股', icon: <Bot size={18} /> },
   { key: 'strategybuilder', label: 'AI策略', icon: <Sparkles size={18} /> },

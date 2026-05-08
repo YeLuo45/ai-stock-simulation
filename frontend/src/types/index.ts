@@ -157,7 +157,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory" | "factor_editor";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory" | "factor_editor" | "strategy_market";
 
 // ============== Stock Pool ==============
 
@@ -419,6 +419,101 @@ export interface SavedStrategy {
   technical?: TechnicalCriteria;
   sentiment?: SentimentCriteria;
   created_at: string;
+}
+
+// ============== Strategy Market ==============
+
+export type StrategyCategory = 'technical' | 'fundamental' | 'quantitative' | 'ai' | 'hybrid';
+export type StrategyRiskLevel = 'low' | 'medium' | 'high';
+export type StrategyStatus = 'active' | 'inactive' | 'archived';
+
+export interface StrategyAuthor {
+  id: string;
+  name: string;
+  avatar?: string;
+  verified?: boolean;
+}
+
+export interface StrategyMarketItem {
+  id: string;
+  name: string;
+  description: string;
+  author: StrategyAuthor;
+  category: StrategyCategory;
+  tags: string[];
+  // Performance metrics
+  total_return: number;
+  annual_return: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  total_trades: number;
+  // Risk assessment
+  risk_level: StrategyRiskLevel;
+  volatility: number;
+  // Usage stats
+  subscribers: number;
+  rating: number;
+  review_count: number;
+  // Metadata
+  version: string;
+  created_at: string;
+  updated_at: string;
+  status: StrategyStatus;
+  is_premium: boolean;
+  is_featured: boolean;
+  // Backtest summary
+  backtest_start_date: string;
+  backtest_end_date: string;
+  initial_cash: number;
+  // Strategy config snapshot
+  config_snapshot?: {
+    entry_conditions: string[];
+    exit_conditions: string[];
+    position_size: number;
+    stop_loss: number;
+    take_profit: number;
+  };
+}
+
+export interface StrategyReview {
+  id: string;
+  strategy_id: string;
+  user_id: string;
+  user_name: string;
+  rating: number;
+  content: string;
+  pros: string[];
+  cons: string[];
+  created_at: string;
+  helpful_count: number;
+}
+
+export interface StrategySubscription {
+  id: string;
+  strategy_id: string;
+  user_id: string;
+  subscribed_at: string;
+  status: 'active' | 'cancelled';
+}
+
+export interface StrategyMarketFilters {
+  category?: StrategyCategory;
+  risk_level?: StrategyRiskLevel;
+  min_rating?: number;
+  min_annual_return?: number;
+  max_drawdown?: number;
+  tags?: string[];
+  search?: string;
+  sort_by: 'rating' | 'annual_return' | 'subscribers' | 'recent';
+  sort_order: 'asc' | 'desc';
+}
+
+export interface StrategyMarketStats {
+  total_strategies: number;
+  total_subscribers: number;
+  avg_rating: number;
+  categories: Record<StrategyCategory, number>;
 }
 
 // ============== Memory / Notes ==============
