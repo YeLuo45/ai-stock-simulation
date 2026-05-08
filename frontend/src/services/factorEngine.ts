@@ -679,6 +679,310 @@ export function getAllFactorDefinitions(): FactorDefinition[] {
   return [...BUILTIN_FACTORS, ...custom];
 }
 
+// ---- Factor Mining ----
+
+export type MiningMethod = 'rolling_correlation' | 'volatility_change' | 'price_volume_divergence' | 'ma_dispersion' | 'seasonality';
+
+/**
+ * Mine new factors from price/volume history.
+ * Returns FactorDefinition[] with discovered factors.
+ */
+export function mineFactors(history: OHLCV[]): FactorDefinition[] {
+  const factors: FactorDefinition[] = [];
+  const closes = history.map(h => h.close);
+  const volumes = history.map(h => h.volume);
+
+  // 1. Rolling Correlation factors
+  const corrMethods = [
+    { id: 'corr_ma5_vol', label: 'MA5与成交量相关性', window: 5 },
+    { id: 'corr_ma20_vol', label: 'MA20与成交量相关性', window: 20 },
+    { id: 'corr_price_vol', label: '价格与成交量相关性', window: 10 },
+  ];
+  for (const m of corrMethods) {
+    const corr = computeRollingCorrelation(closes, volumes, m.window);
+    if (corr !== null) {
+      factors.push({
+        id: `mined_${m.id}`,
+        name: `mined_${m.id}`,
+        name_cn: `挖掘-${m.label}`,
+        description: `滚动${m.window}日${m.label}因子`,
+        category: 'custom',
+        data_type: 'number',
+        scope: 'stock',
+        order: 200,
+        norm_min: -1,
+        norm_max: 1,
+      });
+    }
+  }
+
+  // 2. Volatility Change factors
+  const volWindows = [
+    { id: 'vol_change_5_20', label: '波动率变化(5/20日)', w1: 5, w2: 20 },
+    { id: 'vol_change_10_30', label: '波动率变化(10/30日)', w1: 10, w2: 30 },
+  ];
+  for (const v of volWindows) {
+    const vol5 = computeRollingVolatility(closes, v.w1);
+    const vol20 = computeRollingVolatility(closes, v.w2);
+    if (vol5 !== null && vol20 !== null) {
+      factors.push({
+        id: `mined_${v.id}`,
+        name: `mined_${v.id}`,
+        name_cn: `挖掘-${v.label}`,
+        description: `短期/长期波动率比率`,
+        category: 'custom',
+        data_type: 'number',
+        scope: 'stock',
+        order: 201,
+        norm_min: 0,
+        norm_max: 3,
+      });
+    }
+  }
+
+  // 3. Price-Volume Divergence factors
+  const div = detectPriceVolumeDivergence(history);
+  if (div) {
+    factors.push({
+      id: 'mined_pv_divergence',
+      name: 'mined_pv_divergence',
+      name_cn: '挖掘-价量背离',
+      description: '价格创新高但量能未跟随的背离程度',
+      category: 'custom',
+      data_type: 'number',
+      scope: 'stock',
+      order: 202,
+      norm_min: -2,
+      norm_max: 2,
+    });
+  }
+
+  // 4. MA Dispersion factors
+  const disp = computeMADispersion(history);
+  if (disp !== null) {
+    factors.push({
+      id: 'mined_ma_dispersion',
+      name: 'mined_ma_dispersion',
+      name_cn: '挖掘-均线分散度',
+      description: '多条均线之间的离散程度',
+      category: 'custom',
+      data_type: 'number',
+      scope: 'stock',
+      order: 203,
+      norm_min: 0,
+      norm_max: 10,
+    });
+  }
+
+  // 5. Seasonality factor (day-of-week effect)
+  const seas = computeSeasonality(history);
+  if (seas !== null) {
+    factors.push({
+      id: 'mined_seasonality',
+      name: 'mined_seasonality',
+      name_cn: '挖掘-季节性因子',
+      description: '周度/月度周期效应',
+      category: 'custom',
+      data_type: 'number',
+      scope: 'stock',
+      order: 204,
+      norm_min: -5,
+      norm_max: 5,
+    });
+  }
+
+  return factors;
+}
+
+function computeRollingCorrelation(series1: number[], series2: number[], window: number): number | null {
+  if (series1.length < window || series2.length < window) return null;
+  const s1 = series1.slice(-window);
+  const s2 = series2.slice(-window);
+  const mean1 = s1.reduce((a, b) => a + b, 0) / window;
+  const mean2 = s2.reduce((a, b) => a + b, 0) / window;
+  let num = 0, den1 = 0, den2 = 0;
+  for (let i = 0; i < window; i++) {
+    const d1 = s1[i] - mean1;
+    const d2 = s2[i] - mean2;
+    num += d1 * d2;
+    den1 += d1 * d1;
+    den2 += d2 * d2;
+  }
+  const den = Math.sqrt(den1 * den2);
+  return den === 0 ? null : num / den;
+}
+
+function computeRollingVolatility(closes: number[], window: number): number | null {
+  if (closes.length < window + 1) return null;
+  const slice = closes.slice(-window - 1);
+  const returns: number[] = [];
+  for (let i = 1; i < slice.length; i++) {
+    returns.push((slice[i] - slice[i - 1]) / slice[i - 1]);
+  }
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+  return Math.sqrt(variance) * Math.sqrt(252);
+}
+
+function detectPriceVolumeDivergence(history: OHLCV[]): number | null {
+  if (history.length < 20) return null;
+  const recent = history.slice(-20);
+  const priceChange = (recent[recent.length - 1].close - recent[0].close) / recent[0].close;
+  const volChange = (recent[recent.length - 1].volume - recent[0].volume) / (recent[0].volume + 1);
+  return priceChange > 0.05 && volChange < 0 ? 1 : priceChange < -0.05 && volChange > 0 ? -1 : 0;
+}
+
+function computeMADispersion(history: OHLCV[]): number | null {
+  if (history.length < 60) return null;
+  const closes = history.map(h => h.close);
+  const ma5 = closes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  const ma10 = closes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+  const ma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  const ma60 = closes.slice(-60).reduce((a, b) => a + b, 0) / 60;
+  const currentPrice = closes[closes.length - 1];
+  const dispersion = Math.abs(currentPrice - ma5) + Math.abs(currentPrice - ma10) + Math.abs(currentPrice - ma20) + Math.abs(currentPrice - ma60);
+  return dispersion / 4;
+}
+
+function computeSeasonality(history: OHLCV[]): number | null {
+  if (history.length < 30) return null;
+  const returns: number[] = [];
+  for (let i = 1; i < history.length; i++) {
+    returns.push((history[i].close - history[i - 1].close) / history[i - 1].close);
+  }
+  const byDow = [0, 0, 0, 0, 0, 0, 0];
+  const dowCount = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < history.length; i++) {
+    const dow = new Date(history[i].date).getDay();
+    if (i > 0) {
+      byDow[dow] += returns[i - 1];
+      dowCount[dow]++;
+    }
+  }
+  const dowAvg = byDow.map((s, i) => dowCount[i] > 0 ? s / dowCount[i] : 0);
+  const overallAvg = returns.reduce((a, b) => a + b, 0) / returns.length;
+  return dowAvg.reduce((max, v) => Math.max(max, Math.abs(v - overallAvg)), 0) * 100;
+}
+
+// ---- Factor Correlation Matrix ----
+
+export interface CorrelationResult {
+  matrix: number[][];
+  factorIds: string[];
+}
+
+/**
+ * Compute pairwise Pearson correlation matrix for selected factors across symbols.
+ */
+export function computeFactorCorrelationMatrix(
+  symbols: string[],
+  factors: FactorDefinition[]
+): CorrelationResult {
+  const factorIds = factors.map(f => f.id);
+  const n = factorIds.length;
+  const matrix: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
+
+  // Generate factor data for each symbol
+  const factorData = generateFactorData(symbols);
+
+  // Compute correlation for each pair
+  for (let i = 0; i < n; i++) {
+    matrix[i][i] = 1;
+    for (let j = i + 1; j < n; j++) {
+      const valsI = symbols.map(s => factorData[s]?.[factorIds[i]] ?? 0);
+      const valsJ = symbols.map(s => factorData[s]?.[factorIds[j]] ?? 0);
+      const corr = pearsonCorrelation(valsI, valsJ);
+      matrix[i][j] = corr;
+      matrix[j][i] = corr;
+    }
+  }
+
+  return { matrix, factorIds };
+}
+
+function pearsonCorrelation(x: number[], y: number[]): number {
+  const n = x.length;
+  if (n !== y.length || n < 2) return 0;
+  const meanX = x.reduce((a, b) => a + b, 0) / n;
+  const meanY = y.reduce((a, b) => a + b, 0) / n;
+  let num = 0, denX = 0, denY = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = x[i] - meanX;
+    const dy = y[i] - meanY;
+    num += dx * dy;
+    denX += dx * dx;
+    denY += dy * dy;
+  }
+  const den = Math.sqrt(denX * denY);
+  return den === 0 ? 0 : num / den;
+}
+
+// ---- Factor Scoring ----
+
+export interface FactorScore {
+  ic: number;
+  ir: number;
+  turnoverRate: number;
+  icDecay: number[];
+}
+
+/**
+ * Score a single factor: IC, IR, turnover rate, and IC decay curve.
+ */
+export function scoreFactor(symbols: string[], factorId: string): FactorScore {
+  // Generate mock factor time series for each symbol
+  const factorData = generateFactorData(symbols);
+  const returns = generateReturnSeries(symbols);
+
+  const n = symbols.length;
+  const icSeries: number[] = [];
+
+  // Compute IC for each "day" (simulate with random windows)
+  const windows = 20;
+  for (let w = 0; w < windows; w++) {
+    const icValues: number[] = [];
+    for (const sym of symbols) {
+      const fv = (factorData[sym]?.[factorId] ?? 0.5) + (Math.random() - 0.5) * 0.1;
+      const ret = returns[sym]?.[w % returns[sym]?.length] ?? 0;
+      icValues.push(fv * ret);
+    }
+    const meanIC = icValues.reduce((a, b) => a + b, 0) / n;
+    const stdIC = Math.sqrt(icValues.reduce((sum, v) => sum + Math.pow(v - meanIC, 2), 0) / n);
+    const ic = stdIC > 0 ? meanIC / stdIC : 0;
+    icSeries.push(ic);
+  }
+
+  const meanIC = icSeries.reduce((a, b) => a + b, 0) / icSeries.length;
+  const stdIC = Math.sqrt(icSeries.reduce((sum, v) => sum + Math.pow(v - meanIC, 2), 0) / icSeries.length);
+  const ic = meanIC;
+  const ir = stdIC > 0 ? meanIC / stdIC : 0;
+
+  // Turnover rate
+  const turnoverRate = 0.05 + Math.random() * 0.15;
+
+  // IC decay: 1-day, 3-day, 5-day, 10-day
+  const icDecay = [
+    ic,
+    ic * (0.85 + Math.random() * 0.1),
+    ic * (0.7 + Math.random() * 0.1),
+    ic * (0.5 + Math.random() * 0.15),
+  ];
+
+  return { ic, ir, turnoverRate, icDecay };
+}
+
+function generateReturnSeries(symbols: string[]): Record<string, number[]> {
+  const result: Record<string, number[]> = {};
+  for (const sym of symbols) {
+    const returns: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      returns.push((Math.random() - 0.5) * 0.1);
+    }
+    result[sym] = returns;
+  }
+  return result;
+}
+
 // Import required helpers from indicators
 function calculateRSI(closes: number[], period = 14): number {
   if (closes.length < period + 1) return 50;

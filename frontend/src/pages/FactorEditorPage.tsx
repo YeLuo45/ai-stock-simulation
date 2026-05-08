@@ -36,8 +36,12 @@ import {
   Check,
   X,
   Star,
+  Sparkles,
+  Grid3X3,
 } from 'lucide-react'
 import clsx from 'clsx'
+import FactorMiningPanel from '../components/FactorMiningPanel'
+import FactorCorrelationHeatmap from '../components/FactorCorrelationHeatmap'
 
 const CATEGORY_LABELS: Record<FactorCategory, string> = {
   price: '价格类',
@@ -66,7 +70,7 @@ const DEFAULT_SYMBOLS = [
 export default function FactorEditorPage() {
   const { showNotification } = useStore()
 
-  const [activeTab, setActiveTab] = useState<'editor' | 'screener' | 'backtest' | 'portfolios'>('editor')
+  const [activeTab, setActiveTab] = useState<'editor' | 'screener' | 'backtest' | 'portfolios' | 'mining' | 'correlation'>('editor')
 
   // Factor definitions state
   const [editingFactor, setEditingFactor] = useState<SavedFactor | null>(null)
@@ -292,6 +296,8 @@ export default function FactorEditorPage() {
           { key: 'screener', label: '因子筛选', icon: <Target size={16} /> },
           { key: 'backtest', label: '因子回测', icon: <BarChart3 size={16} /> },
           { key: 'portfolios', label: '我的组合', icon: <Star size={16} /> },
+          { key: 'mining', label: '因子挖掘', icon: <Sparkles size={16} /> },
+          { key: 'correlation', label: '相关性', icon: <Grid3X3 size={16} /> },
         ].map(tab => (
           <button
             key={tab.key}
@@ -941,6 +947,19 @@ export default function FactorEditorPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ===== Mining Tab ===== */}
+      {activeTab === 'mining' && (
+        <FactorMiningPanel />
+      )}
+
+      {/* ===== Correlation Tab ===== */}
+      {activeTab === 'correlation' && (
+        <FactorCorrelationHeatmap
+          factors={getAllFactorDefinitions()}
+          symbols={symbols}
+        />
       )}
     </div>
   )
