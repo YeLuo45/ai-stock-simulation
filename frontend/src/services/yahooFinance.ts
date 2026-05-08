@@ -184,3 +184,57 @@ export async function getRealtimeQuote(symbol: string): Promise<{
     beta: meta.beta || 1,
   };
 }
+
+/**
+ * 获取东方财富个股资讯
+ */
+export async function fetchStockNews(symbol: string): Promise<Array<{
+  title: string;
+  pubDate: string;
+  url: string;
+  sentiment?: 'positive' | 'negative' | 'neutral';
+}>> {
+  // 东方财富资讯API
+  const code = normalizeSymbol(symbol); // 000001.SZ -> 000001
+  const url = `https://np-anotice-stock.eastmoney.com/api/security/ann?sr=-1&page_size=10&page_index=1&ann_type=SHA%2CSZA&client_source=web&stock_list=${code}`;
+  
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    });
+    if (!response.ok) return [];
+    
+    const data = await response.json();
+    const notices = data?.data?.list || [];
+    
+    return notices.slice(0, 8).map((n: any) => ({
+      title: n.title || n.notice_title || '无标题',
+      pubDate: n.publish_time ? new Date(n.publish_time).toLocaleDateString('zh-CN') : '',
+      url: n.art_url || n.url || '#',
+      sentiment: undefined as 'positive' | 'negative' | 'neutral' | undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 简单的中文情感分析（基于关键词）
+ */
+export function analyzeSentiment(text: string): 'positive' | 'negative' | 'neutral' {
+  const lower = text.toLowerCase();
+  const positiveWords = ['涨', '盈利', '增长', '突破', '看好', '增持', '买入', '业绩', '利润', '分红', '新高', '超预期', '扭亏为盈', '大幅上涨'];
+  const negativeWords = ['跌', '亏损', '下降', '减持', '卖出', '预警', '风险', '违约', '诉讼', '处罚', '造假', '大幅下跌', '业绩下滑', '商誉减值'];
+  
+  let score = 0;
+  for (const word of positiveWords) {
+    if (lower.includes(word)) score++;
+  }
+  for (const word of negativeWords) {
+    if (lower.includes(word)) score--;
+  }
+  
+  if (score > 0) return 'positive';
+  if (score < 0) return 'negative';
+  return 'neutral';
+}

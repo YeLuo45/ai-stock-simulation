@@ -2,15 +2,16 @@
  * Technical Analysis Page - AI-powered chart analysis with multi-panel K-line chart
  * Now also supports batch backtesting with comparison table
  */
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useStore } from "../store";
 import { technicalAnalysis, getIndicators, searchStocks, runBatchBacktest, getKlineData, exportReport } from "../services/api";
 import { generatePriceHistory } from "../services/indicators";
 import type { OHLCV } from "../services/indicators";
 import type { TechnicalAnalysis, StockInfo, StockPool, BatchBacktestResult } from "../types";
 import KLineChart from "../components/KLineChart";
-import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play, FileText, FileSpreadsheet, FileDown, Download } from "lucide-react";
+import { Layers, ChevronDown, Check, X, ArrowUpDown, BarChart2, Loader2, Play, FileText, FileSpreadsheet, FileDown, Download, Newspaper, TrendingUp, TrendingDown, Minus, ExternalLink } from "lucide-react";
 import { toCSV, downloadCSV } from "../utils/export";
+import { fetchStockNews, analyzeSentiment } from "../services/yahooFinance";
 
 type SortField = "totalReturn" | "sharpeRatio" | "maxDrawdown" | "winRate" | "tradeCount";
 type SortDir = "asc" | "desc";
@@ -38,6 +39,41 @@ export default function AnalysisPage() {
   const [sortField, setSortField] = useState<SortField>("totalReturn");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const cancelRef = useRef(false);
+
+  // News state
+  const [stockNews, setStockNews] = useState<Array<{
+    title: string;
+    pubDate: string;
+    url: string;
+    sentiment: 'positive' | 'negative' | 'neutral';
+  }>>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!symbol || symbol.length !== 6) return;
+    
+    let cancelled = false;
+    
+    const loadNews = async () => {
+      setNewsLoading(true);
+      setStockNews([]);
+      
+      const news = await fetchStockNews(symbol);
+      if (cancelled) return;
+      
+      // 对每条新闻做情感分析
+      const withSentiment = news.map(n => ({
+        ...n,
+        sentiment: analyzeSentiment(n.title),
+      }));
+      
+      setStockNews(withSentiment);
+      setNewsLoading(false);
+    };
+    
+    loadNews();
+    return () => { cancelled = true; };
+  }, [symbol]);
 
   const handleSymbolSearch = async (kw: string) => {
     setSymbol(kw);
@@ -951,6 +987,55 @@ export default function AnalysisPage() {
           <BarChart2 size={64} className="mx-auto mb-4 text-text-muted opacity-30" />
           <p className="text-text-secondary font-medium mb-1">批量回测</p>
           <p className="text-text-muted text-sm mt-2">从股票池导入或手动选择标的开始批量回测</p>
+        </div>
+      )}
+
+      {/* 资讯面板 */}
+      {(stockNews.length > 0 || newsLoading) && (
+        <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
+          <div className="flex items-center gap-2 mb-3">
+            <Newspaper size={16} className="text-accent-primary" />
+            <h3 className="text-sm font-semibold">个股资讯</h3>
+            {newsLoading && <span className="text-xs text-text-muted animate-pulse">加载中...</span>}
+          </div>
+          
+          {stockNews.length === 0 && !newsLoading && (
+            <p className="text-xs text-text-muted text-center py-4">暂无资讯</p>
+          )}
+          
+          <div className="space-y-2">
+            {stockNews.map((news, i) => (
+              <a
+                key={i}
+                href={news.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-2 p-2 rounded-lg hover:bg-bg-tertiary transition-colors group"
+              >
+                <span className="mt-0.5 flex-shrink-0">
+                  {news.sentiment === 'positive' && <TrendingUp size={14} className="text-accent-success" />}
+                  {news.sentiment === 'negative' && <TrendingDown size={14} className="text-accent-danger" />}
+                  {news.sentiment === 'neutral' && <Minus size={14} className="text-text-muted" />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs leading-relaxed group-hover:text-accent-primary transition-colors line-clamp-2">
+                    {news.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-text-muted">{news.pubDate}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      news.sentiment === 'positive' ? 'bg-accent-success/20 text-accent-success' :
+                      news.sentiment === 'negative' ? 'bg-accent-danger/20 text-accent-danger' :
+                      'bg-bg-tertiary text-text-muted'
+                    }`}>
+                      {news.sentiment === 'positive' ? '利好' : news.sentiment === 'negative' ? '利空' : '中性'}
+                    </span>
+                    <ExternalLink size={8} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>
