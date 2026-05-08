@@ -157,7 +157,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory" | "factor_editor";
 
 // ============== Stock Pool ==============
 
@@ -449,5 +449,138 @@ export interface MemoryStats {
   byType: Record<MemoryType, number>;
   recentCount: number;
   favoriteCount: number;
+}
+
+// ============== Factor Engine ==============
+
+export type FactorCategory = 'price' | 'technical' | 'financial' | 'sentiment' | 'custom';
+export type FactorDataType = 'number' | 'boolean' | 'enum';
+export type FactorScope = 'stock' | 'market';
+
+export interface FactorDefinition {
+  id: string;
+  name: string;
+  name_cn: string;
+  description: string;
+  category: FactorCategory;
+  data_type: FactorDataType;
+  scope: FactorScope;
+  /** JSONata or simple expression formula for computed factors */
+  formula?: string;
+  /** Available parameters in formula */
+  params?: string[];
+  /** Default value when data unavailable */
+  default_value?: number | boolean;
+  /** Min/Max for normalization reference */
+  norm_min?: number;
+  norm_max?: number;
+  /** UI display order */
+  order: number;
+  /** Hidden from editor */
+  hidden?: boolean;
+}
+
+export interface FactorValue {
+  factor_id: string;
+  symbol: string;
+  value: number | boolean;
+  timestamp: string;
+}
+
+export interface FactorSignal {
+  factor_id: string;
+  symbol: string;
+  signal: 'long' | 'short' | 'neutral';
+  strength: number; // 0-1
+  value: number;
+  timestamp: string;
+}
+
+export interface FactorPortfolio {
+  id: string;
+  name: string;
+  description?: string;
+  factors: FactorWeight[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FactorWeight {
+  factor_id: string;
+  weight: number; // can be negative for short
+  direction: 'long' | 'short' | 'both';
+}
+
+export interface FactorBacktestRequest {
+  portfolio_id?: string;
+  factors?: FactorWeight[];
+  symbols: string[];
+  start_date: string;
+  end_date: string;
+  initial_cash?: number;
+  rebalance_interval?: number; // days, default 5
+  top_n?: number; // top N stocks to hold
+  long_short?: boolean; // include long/short portfolio
+}
+
+export interface FactorBacktestResult {
+  total_return: number;
+  annual_return: number;
+  max_drawdown: number;
+  sharpe_ratio: number;
+  win_rate: number;
+  total_trades: number;
+  equity_curve: EquityPoint[];
+  long_return: number;
+  short_return: number;
+  long_short_return: number;
+  factor_returns: Record<string, number>; // factor_id -> return contribution
+  trades: FactorTrade[];
+}
+
+export interface FactorTrade {
+  date: string;
+  symbol: string;
+  action: 'buy' | 'sell';
+  price: number;
+  reason: string;
+  factor_values: Record<string, number>;
+}
+
+export interface SavedFactor {
+  id: string;
+  name: string;
+  name_cn: string;
+  description: string;
+  category: FactorCategory;
+  formula: string;
+  params: string[];
+  created_at: string;
+  updated_at: string;
+  is_public?: boolean;
+  tags: string[];
+}
+
+// Factor screening
+export interface FactorScreenerRequest {
+  factors: FactorWeight[];
+  symbols: string[];
+  filters?: {
+    min_value?: number;
+    max_value?: number;
+    include_symbols?: string[];
+    exclude_symbols?: string[];
+  };
+  sort_by?: string;
+  sort_desc?: boolean;
+  limit?: number;
+}
+
+export interface FactorScreenerResult {
+  symbol: string;
+  name: string;
+  scores: Record<string, number>;
+  composite_score: number;
+  rank: number;
 }
 

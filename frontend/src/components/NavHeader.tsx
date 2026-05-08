@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { getPortfolio } from '../services/api'
 import { useState, useEffect } from 'react'
-import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, Layers, Settings2, Sparkles, Activity, DollarSign, Trophy, PieChart, Dna, Brain } from 'lucide-react'
+import { TrendingUp, BarChart2, Bot, Settings, Wallet, ChevronDown, Star, Layers, Settings2, Sparkles, Activity, DollarSign, Trophy, PieChart, Dna, Brain, Sliders } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page } from '../types'
 
@@ -15,6 +15,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: React.ReactNode }[] = [
   { key: 'optimize', label: '参数优化', icon: <Settings2 size={18} /> },
   { key: 'portfolio_optimizer', label: '组合优化', icon: <PieChart size={18} /> },
   { key: 'evolution', label: '遗传优化', icon: <Dna size={18} /> },
+  { key: 'factor_editor', label: '因子引擎', icon: <Sliders size={18} /> },
   { key: 'memory', label: '记忆库', icon: <Brain size={18} /> },
   { key: 'stockpool', label: '股票池', icon: <Layers size={18} /> },
   { key: 'trading', label: '交易', icon: <Wallet size={18} /> },

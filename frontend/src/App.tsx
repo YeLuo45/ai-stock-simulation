@@ -17,6 +17,7 @@ import ContestPage from './pages/ContestPage'
 import PortfolioOptimizerPage from './pages/PortfolioOptimizerPage'
 import EvolutionPage from './pages/EvolutionPage'
 import MemoryReviewPage from './pages/MemoryReviewPage'
+import FactorEditorPage from './pages/FactorEditorPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -72,6 +73,8 @@ function App() {
         return <PortfolioOptimizerPage />
       case 'evolution':
         return <EvolutionPage />
+      case 'factor_editor':
+        return <FactorEditorPage />
       case 'memory':
         return <MemoryReviewPage />
       default:
