@@ -4,6 +4,7 @@ import NavHeader from './components/NavHeader'
 import HomePage from './pages/HomePage'
 import SelectionPage from './pages/SelectionPage'
 import BacktestPage from './pages/BacktestPage'
+import BacktestComparePage from './pages/BacktestComparePage'
 import TradingPage from './pages/TradingPage'
 import AnalysisPage from './pages/AnalysisPage'
 import SettingsPage from './pages/SettingsPage'
@@ -50,6 +51,8 @@ function App() {
         return <SelectionPage />
       case 'backtest':
         return <BacktestPage />
+      case 'backtest_compare':
+        return <BacktestComparePage />
       case 'optimize':
         return <OptimizePage />
       case 'trading':

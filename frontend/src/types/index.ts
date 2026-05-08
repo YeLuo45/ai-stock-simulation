@@ -118,6 +118,35 @@ export interface BatchBacktestResponse {
   progress: number;
 }
 
+// ============== Backtest Compare ==============
+
+export interface MonthlyStat {
+  month: string;
+  return: number;
+}
+
+export interface BacktestTrade {
+  date: string;
+  type: string;
+  symbol: string;
+  price: number;
+  quantity: number;
+  pnl: number;
+}
+
+export interface BacktestResult {
+  strategyName: string;
+  annualReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  winRate: number;
+  profitLossRatio: number;
+  totalTrades: number;
+  equityCurve: { date: string; value: number }[];
+  monthlyStats: MonthlyStat[];
+  tradeLog: BacktestTrade[];
+}
+
 export interface TechnicalIndicators {
   MA5?: number;
   MA10?: number;
@@ -157,7 +186,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory" | "factor_editor" | "strategy_market";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory" | "factor_editor" | "strategy_market" | "backtest_compare";
 
 // ============== Stock Pool ==============
 
