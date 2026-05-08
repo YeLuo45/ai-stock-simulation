@@ -14,6 +14,7 @@ import StrategyBuilderPage from './pages/StrategyBuilderPage'
 import MarketPage from './pages/MarketPage'
 import CapitalFlowPage from './pages/CapitalFlowPage'
 import ContestPage from './pages/ContestPage'
+import PortfolioOptimizerPage from './pages/PortfolioOptimizerPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -65,6 +66,8 @@ function App() {
         return <CapitalFlowPage />
       case 'contest':
         return <ContestPage />
+      case 'portfolio_optimizer':
+        return <PortfolioOptimizerPage />
       default:
         return <HomePage />
     }
