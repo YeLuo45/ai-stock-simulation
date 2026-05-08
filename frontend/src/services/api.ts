@@ -153,12 +153,12 @@ export const getMultipleQuotes = async (symbols: string[]) => {
 
 // ============== Trading ==============
 
-export const getPortfolio = async (): Promise<Portfolio> => {
+export const getPortfolio = async (accountId: number = 1): Promise<Portfolio> => {
   if (!isDemoMode) {
     // Fetch account info and positions in parallel, then merge
     const [accountRes, positionsRes] = await Promise.all([
-      fetch(`/api/trading/account`),
-      fetch(`/api/trading/positions`),
+      fetch(`/api/trading/account?account_id=${accountId}`),
+      fetch(`/api/trading/positions?account_id=${accountId}`),
     ]);
     const account = await accountRes.json();
     const positionsData = await positionsRes.json();
@@ -168,12 +168,12 @@ export const getPortfolio = async (): Promise<Portfolio> => {
     };
   }
   await delay(200);
-  return s_recalcPortfolio();
+  return s_recalcPortfolio(accountId);
 };
 
-export const executeTrade = async (req: TradeRequest): Promise<Trade> => {
+export const executeTrade = async (req: TradeRequest, accountId: number = 1): Promise<Trade> => {
   if (!isDemoMode) {
-    const res = await fetch(`/api/trading/trade`, {
+    const res = await fetch(`/api/trading/trade?account_id=${accountId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -182,7 +182,7 @@ export const executeTrade = async (req: TradeRequest): Promise<Trade> => {
   }
   await delay(500);
 
-  const portfolio = s_getPortfolio();
+  const portfolio = s_getPortfolio(accountId);
   const stock = findStock(req.symbol);
   const price = req.price || stock.price;
   const commission = req.quantity * price * 0.0003;
@@ -227,7 +227,7 @@ export const executeTrade = async (req: TradeRequest): Promise<Trade> => {
     }
   }
 
-  s_recalcPortfolio();
+  s_recalcPortfolio(accountId);
 
   const trade: Trade = {
     id: Date.now(),
@@ -240,26 +240,26 @@ export const executeTrade = async (req: TradeRequest): Promise<Trade> => {
     total_cost: tradeType === "buy" ? req.quantity * price * 1.0003 : -req.quantity * price * 0.9997,
     timestamp: new Date().toISOString(),
   };
-  s_addTrade(trade);
+  s_addTrade(trade, accountId);
   return trade;
 };
 
-export const getTrades = async (limit = 50): Promise<Trade[]> => {
+export const getTrades = async (limit = 50, accountId: number = 1): Promise<Trade[]> => {
   if (!isDemoMode) {
-    const res = await fetch(`/api/trading/trades?limit=${limit}`);
+    const res = await fetch(`/api/trading/trades?limit=${limit}&account_id=${accountId}`);
     return res.json();
   }
   await delay(200);
-  return s_getTrades().slice(0, limit);
+  return s_getTrades(accountId).slice(0, limit);
 };
 
-export const resetPortfolio = async () => {
+export const resetPortfolio = async (accountId: number = 1) => {
   if (!isDemoMode) {
-    const res = await fetch(`/api/trading/reset`, { method: "POST" });
+    const res = await fetch(`/api/trading/reset?account_id=${accountId}`, { method: "POST" });
     return res.json();
   }
   await delay(300);
-  s_resetAll();
+  s_resetAll(accountId);
   return { message: "Portfolio reset successfully" };
 };
 

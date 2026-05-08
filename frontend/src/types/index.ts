@@ -45,6 +45,16 @@ export interface Portfolio {
   positions: Position[];
 }
 
+export interface Account {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface AccountWithPortfolio extends Account {
+  portfolio: Portfolio;
+}
+
 export interface TradeRequest {
   symbol: string;
   name: string;

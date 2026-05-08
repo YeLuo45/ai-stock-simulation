@@ -23,6 +23,15 @@ interface AppState {
   portfolio: Portfolio | null;
   setPortfolio: (p: Portfolio) => void;
 
+  // Multi-account
+  accounts: import("../types").Account[];
+  currentAccountId: number | null;
+  setAccounts: (accounts: import("../types").Account[]) => void;
+  setCurrentAccountId: (id: number | null) => void;
+  addAccount: (account: import("../types").Account) => void;
+  deleteAccount: (id: number) => void;
+  renameAccount: (id: number, name: string) => void;
+
   // Trade history
   trades: Trade[];
   setTrades: (trades: Trade[]) => void;
@@ -81,6 +90,52 @@ export const useStore = create<AppState>((set) => ({
 
   portfolio: null,
   setPortfolio: (portfolio) => set({ portfolio }),
+
+  accounts: (() => {
+    try {
+      const saved = localStorage.getItem('ai-stock-accounts');
+      return saved ? JSON.parse(saved) : [{ id: 1, name: '默认账户', created_at: new Date().toISOString() }];
+    } catch {
+      return [{ id: 1, name: '默认账户', created_at: new Date().toISOString() }];
+    }
+  })(),
+  currentAccountId: (() => {
+    try {
+      const saved = localStorage.getItem('ai-stock-current-account-id');
+      return saved ? JSON.parse(saved) : 1;
+    } catch {
+      return 1;
+    }
+  })(),
+  setAccounts: (accounts) => {
+    try { localStorage.setItem('ai-stock-accounts', JSON.stringify(accounts)); } catch {}
+    set({ accounts });
+  },
+  setCurrentAccountId: (currentAccountId) => {
+    try { localStorage.setItem('ai-stock-current-account-id', JSON.stringify(currentAccountId)); } catch {}
+    set({ currentAccountId });
+  },
+  addAccount: (account) => set((state) => {
+    const newAccounts = [...state.accounts, account];
+    try { localStorage.setItem('ai-stock-accounts', JSON.stringify(newAccounts)); } catch {}
+    return { accounts: newAccounts };
+  }),
+  deleteAccount: (id) => set((state) => {
+    const newAccounts = state.accounts.filter(a => a.id !== id);
+    const newCurrentId = state.currentAccountId === id ? (newAccounts[0]?.id || null) : state.currentAccountId;
+    try {
+      localStorage.setItem('ai-stock-accounts', JSON.stringify(newAccounts));
+      localStorage.setItem('ai-stock-current-account-id', JSON.stringify(newCurrentId));
+      localStorage.removeItem(`ai-stock-portfolio-${id}`);
+      localStorage.removeItem(`ai-stock-trades-${id}`);
+    } catch {}
+    return { accounts: newAccounts, currentAccountId: newCurrentId };
+  }),
+  renameAccount: (id, name) => set((state) => {
+    const newAccounts = state.accounts.map(a => a.id === id ? { ...a, name } : a);
+    try { localStorage.setItem('ai-stock-accounts', JSON.stringify(newAccounts)); } catch {}
+    return { accounts: newAccounts };
+  }),
 
   trades: [],
   setTrades: (trades) => set({ trades }),

@@ -1,18 +1,19 @@
 /**
  * Trading Page - Simulated Trading & Portfolio Management
  * Cyberpunk Terminal Theme
+ * Multi-Account Support
  */
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
 import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } from "../services/api";
 import type { StockInfo } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check } from "lucide-react";
 import clsx from "clsx";
 
 const PAGE_SIZE = 10;
 
 export default function TradingPage() {
-  const { portfolio, setPortfolio, trades, setTrades, showNotification } = useStore();
+  const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount } = useStore();
   const [tab, setTab] = useState<"positions" | "trade" | "history">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
@@ -21,14 +22,19 @@ export default function TradingPage() {
   const [loading, setLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<StockInfo[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [showAccountManager, setShowAccountManager] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
+  const [editingAccountName, setEditingAccountName] = useState("");
+  const [newAccountName, setNewAccountName] = useState("");
 
   // History tab filters & pagination
   const [historyFilter, setHistoryFilter] = useState<"all" | "buy" | "sell">("all");
   const [historyPage, setHistoryPage] = useState(1);
 
   const loadPortfolio = async () => {
+    if (!currentAccountId) return;
     try {
-      const data = await getPortfolio();
+      const data = await getPortfolio(currentAccountId);
       setPortfolio(data);
     } catch (e) {
       console.error(e);
@@ -36,8 +42,9 @@ export default function TradingPage() {
   };
 
   const loadTrades = async () => {
+    if (!currentAccountId) return;
     try {
-      const data = await getTrades(100);
+      const data = await getTrades(100, currentAccountId);
       // Handle both array (demo/backend trading.py) and object with trades property (account.py)
       const trades = Array.isArray(data)
         ? data
@@ -51,7 +58,7 @@ export default function TradingPage() {
   useEffect(() => {
     loadPortfolio();
     loadTrades();
-  }, []);
+  }, [currentAccountId]);
 
   const handleSymbolSearch = async (kw: string) => {
     setSymbol(kw);
@@ -70,7 +77,7 @@ export default function TradingPage() {
   };
 
   const handleTrade = async () => {
-    if (!symbol || !quantity) return;
+    if (!symbol || !quantity || !currentAccountId) return;
     setLoading(true);
     try {
       await executeTrade({
@@ -78,7 +85,7 @@ export default function TradingPage() {
         name: name || symbol,
         trade_type: tradeType,
         quantity: parseInt(quantity),
-      });
+      }, currentAccountId);
       await loadPortfolio();
       await loadTrades();
       setSymbol(""); setName(""); setQuantity("");
@@ -92,9 +99,10 @@ export default function TradingPage() {
   };
 
   const handleReset = async () => {
+    if (!currentAccountId) return;
     if (!confirm("确定要清空所有持仓和交易记录吗？初始资金将恢复为100万元。")) return;
     try {
-      await resetPortfolio();
+      await resetPortfolio(currentAccountId);
       await loadPortfolio();
       setTrades([]);
       showNotification("success", "模拟账户已重置");
@@ -108,6 +116,42 @@ export default function TradingPage() {
     setName(pos.name);
     setTradeType("sell");
     setTab("trade");
+  };
+
+  // ============== Account Management ==============
+  const handleSwitchAccount = (accountId: number) => {
+    setCurrentAccountId(accountId);
+  };
+
+  const handleCreateAccount = () => {
+    if (!newAccountName.trim()) return;
+    const newId = Date.now();
+    addAccount({ id: newId, name: newAccountName.trim(), created_at: new Date().toISOString() });
+    setNewAccountName("");
+    setCurrentAccountId(newId);
+    showNotification("success", `账户"${newAccountName.trim()}"已创建`);
+  };
+
+  const handleStartEditAccount = (id: number, name: string) => {
+    setEditingAccountId(id);
+    setEditingAccountName(name);
+  };
+
+  const handleSaveEditAccount = () => {
+    if (editingAccountId !== null && editingAccountName.trim()) {
+      renameAccount(editingAccountId, editingAccountName.trim());
+      showNotification("success", "账户名称已更新");
+    }
+    setEditingAccountId(null);
+    setEditingAccountName("");
+  };
+
+  const handleDeleteAccount = (id: number) => {
+    const acc = accounts.find(a => a.id === id);
+    if (!acc) return;
+    if (!confirm(`确定删除账户"${acc.name}"吗？所有持仓和交易记录将被清除，且无法恢复。`)) return;
+    deleteAccount(id);
+    showNotification("info", `账户"${acc.name}"已删除`);
   };
 
   const formatMoney = (n: number) => n.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -134,22 +178,55 @@ export default function TradingPage() {
     ];
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {cards.map((card) => (
-          <div key={card.label} className="bg-bg-secondary border border-border-color rounded-xl p-4 relative overflow-hidden group hover:border-accent-primary/40 transition-all">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-accent-primary/5 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-accent-primary/60">{card.icon}</span>
-              <span className="text-xs text-text-muted uppercase tracking-wider">{card.label}</span>
+      <div className="space-y-3">
+        {/* Account Switcher Bar */}
+        <div className="flex items-center gap-3 overflow-x-auto pb-1">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-text-muted uppercase tracking-wider">账户:</span>
+            <div className="flex gap-1.5">
+              {accounts.map(acc => (
+                <button
+                  key={acc.id}
+                  onClick={() => handleSwitchAccount(acc.id)}
+                  className={clsx(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all whitespace-nowrap",
+                    currentAccountId === acc.id
+                      ? "bg-accent-primary/10 border-accent-primary/40 text-accent-primary"
+                      : "bg-bg-tertiary border-border-color text-text-muted hover:text-text-secondary hover:border-accent-primary/30"
+                  )}
+                >
+                  {acc.name}
+                </button>
+              ))}
             </div>
-            <p className={clsx("font-mono text-xl font-bold", card.color)}>
-              {card.isPct
-                ? <>{profitLossSign(card.value)}{card.value.toFixed(2)}%</>
-                : <span className={card.color}>¥{formatMoney(card.value)}</span>
-              }
-            </p>
           </div>
-        ))}
+          <button
+            onClick={() => setShowAccountManager(true)}
+            className="shrink-0 p-1.5 rounded-lg border border-border-color text-text-muted hover:text-accent-primary hover:border-accent-primary/40 transition-colors"
+            title="管理账户"
+          >
+            <Settings2 size={14} />
+          </button>
+        </div>
+
+        {/* Account Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {cards.map((card) => (
+            <div key={card.label} className="bg-bg-secondary border border-border-color rounded-xl p-4 relative overflow-hidden group hover:border-accent-primary/40 transition-all">
+              <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-accent-primary/5 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-accent-primary/60">{card.icon}</span>
+                <span className="text-xs text-text-muted uppercase tracking-wider">{card.label}</span>
+              </div>
+              <p className={clsx("font-mono text-xl font-bold", card.color)}>
+                {card.isPct
+                  ? <>{profitLossSign(card.value)}{card.value.toFixed(2)}%</>
+                  : <span className={card.color}>¥{formatMoney(card.value)}</span>
+                }
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -484,10 +561,135 @@ export default function TradingPage() {
     </div>
   );
 
+  // ============ Account Manager Modal ============
+  const renderAccountManager = () => {
+    if (!showAccountManager) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-md mx-4 shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border-color">
+            <h3 className="text-lg font-bold text-text-primary">账户管理</h3>
+            <button
+              onClick={() => setShowAccountManager(false)}
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            {/* Account List */}
+            <div className="space-y-2">
+              <span className="text-xs text-text-muted uppercase tracking-wider">我的账户</span>
+              {accounts.map(acc => (
+                <div
+                  key={acc.id}
+                  className={clsx(
+                    "flex items-center justify-between px-4 py-3 rounded-xl border transition-all",
+                    currentAccountId === acc.id
+                      ? "bg-accent-primary/5 border-accent-primary/30"
+                      : "bg-bg-tertiary border-border-color hover:border-accent-primary/30"
+                  )}
+                >
+                  {editingAccountId === acc.id ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="text"
+                        value={editingAccountName}
+                        onChange={(e) => setEditingAccountName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveEditAccount()}
+                        className="flex-1 px-3 py-1.5 bg-bg-primary border border-border-color rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+                        autoFocus
+                      />
+                      <button
+                        onClick={handleSaveEditAccount}
+                        className="p-1.5 rounded-lg bg-accent-success/10 text-accent-success hover:bg-accent-success/20 transition-colors"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        onClick={() => setEditingAccountId(null)}
+                        className="p-1.5 rounded-lg bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <div className={clsx(
+                          "w-2 h-2 rounded-full",
+                          currentAccountId === acc.id ? "bg-accent-primary" : "bg-text-muted"
+                        )} />
+                        <div>
+                          <p className="text-sm font-medium text-text-primary">{acc.name}</p>
+                          <p className="text-xs text-text-muted">
+                            创建于 {new Date(acc.created_at).toLocaleDateString("zh-CN")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleStartEditAccount(acc.id, acc.name)}
+                          className="p-1.5 rounded-lg text-text-muted hover:text-accent-primary hover:bg-accent-primary/10 transition-colors"
+                          title="重命名"
+                        >
+                          <Settings2 size={14} />
+                        </button>
+                        {accounts.length > 1 && (
+                          <button
+                            onClick={() => handleDeleteAccount(acc.id)}
+                            className="p-1.5 rounded-lg text-text-muted hover:text-accent-danger hover:bg-accent-danger/10 transition-colors"
+                            title="删除账户"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Create New Account */}
+            <div className="pt-4 border-t border-border-color">
+              <span className="text-xs text-text-muted uppercase tracking-wider block mb-3">创建新账户</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newAccountName}
+                  onChange={(e) => setNewAccountName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateAccount()}
+                  placeholder="输入账户名称"
+                  className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-border-color rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
+                />
+                <button
+                  onClick={handleCreateAccount}
+                  disabled={!newAccountName.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-accent-primary text-bg-primary text-sm font-medium hover:bg-accent-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <Plus size={14} /> 创建
+                </button>
+              </div>
+              <p className="text-xs text-text-muted mt-2">新账户初始资金为100万元，独立持仓和交易记录</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Account Cards */}
       {renderAccountCard()}
+
+      {/* Account Manager Modal */}
+      {renderAccountManager()}
 
       {/* Main Panel */}
       <div className="bg-bg-secondary border border-border-color rounded-2xl overflow-hidden">

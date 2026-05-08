@@ -6,13 +6,15 @@ import type { Portfolio, Trade, BacktestResponse, AIModelConfig, DataSourceRespo
 
 // Storage keys
 const KEYS = {
-  PORTFOLIO: "ai-stock-portfolio",
-  TRADES: "ai-stock-trades",
+  PORTFOLIO: (accountId: number) => `ai-stock-portfolio-${accountId}`,
+  TRADES: (accountId: number) => `ai-stock-trades-${accountId}`,
   BACKTEST_RESULTS: "ai-stock-backtest-results",
   MODEL_CONFIGS: "ai-stock-model-configs",
   MODEL_PRIORITY: "ai-stock-model-priority",
   DATA_SOURCES: "ai-stock-data-sources",
   CURRENT_MODEL: "ai-stock-current-model",
+  ACCOUNTS: "ai-stock-accounts",
+  CURRENT_ACCOUNT_ID: "ai-stock-current-account-id",
 } as const;
 
 // Default stock list
@@ -48,9 +50,9 @@ const DEFAULT_AI_PRIORITY: AIModelPriorityResponse = {
   priority: ["minimax", "zhipu", "claude", "gemini"],
 };
 
-function createDefaultPortfolio(): Portfolio {
+function createDefaultPortfolio(accountId?: number): Portfolio {
   return {
-    id: 1,
+    id: accountId || 1,
     name: "我的模拟账户",
     cash: 1000000,
     total_market_value: 0,
@@ -78,16 +80,16 @@ function save<T>(key: string, value: T): void {
 
 // ============== Portfolio ==============
 
-export function getPortfolio(): Portfolio {
-  return load<Portfolio>(KEYS.PORTFOLIO, createDefaultPortfolio());
+export function getPortfolio(accountId: number = 1): Portfolio {
+  return load<Portfolio>(KEYS.PORTFOLIO(accountId), createDefaultPortfolio(accountId));
 }
 
-export function savePortfolio(portfolio: Portfolio): void {
-  save(KEYS.PORTFOLIO, portfolio);
+export function savePortfolio(portfolio: Portfolio, accountId: number): void {
+  save(KEYS.PORTFOLIO(accountId), portfolio);
 }
 
-export function recalcPortfolio(): Portfolio {
-  const portfolio = getPortfolio();
+export function recalcPortfolio(accountId: number = 1): Portfolio {
+  const portfolio = getPortfolio(accountId);
   portfolio.total_market_value = portfolio.positions.reduce((sum, p) => sum + p.market_value, 0);
   portfolio.total_assets = portfolio.cash + portfolio.total_market_value;
   portfolio.total_profit_loss = portfolio.total_assets - 1000000;
@@ -97,20 +99,20 @@ export function recalcPortfolio(): Portfolio {
     p.profit_loss = (p.current_price - p.avg_cost) * p.quantity;
     p.profit_loss_pct = ((p.current_price - p.avg_cost) / p.avg_cost) * 100;
   });
-  savePortfolio(portfolio);
+  savePortfolio(portfolio, accountId);
   return portfolio;
 }
 
 // ============== Trades ==============
 
-export function getTrades(): Trade[] {
-  return load<Trade[]>(KEYS.TRADES, []);
+export function getTrades(accountId: number = 1): Trade[] {
+  return load<Trade[]>(KEYS.TRADES(accountId), []);
 }
 
-export function addTrade(trade: Trade): void {
-  const trades = getTrades();
+export function addTrade(trade: Trade, accountId: number): void {
+  const trades = getTrades(accountId);
   trades.unshift(trade);
-  save(KEYS.TRADES, trades);
+  save(KEYS.TRADES(accountId), trades);
 }
 
 // ============== Backtest Results ==============
@@ -165,18 +167,36 @@ export function saveAIModelPriority(priority: string[]): void {
 
 // ============== Reset ==============
 
-export function resetAll(): void {
-  localStorage.removeItem(KEYS.PORTFOLIO);
-  localStorage.removeItem(KEYS.TRADES);
+export function resetAll(accountId: number = 1): void {
+  localStorage.removeItem(KEYS.PORTFOLIO(accountId));
+  localStorage.removeItem(KEYS.TRADES(accountId));
   localStorage.removeItem(KEYS.BACKTEST_RESULTS);
   // Keep model configs, data sources, priority
 }
 
 // ============== Initial setup check ==============
 
-export function initStorage(): void {
+export function initStorage(accountId: number = 1): void {
   // Ensure portfolio exists
-  if (!localStorage.getItem(KEYS.PORTFOLIO)) {
-    savePortfolio(createDefaultPortfolio());
+  if (!localStorage.getItem(KEYS.PORTFOLIO(accountId))) {
+    savePortfolio(createDefaultPortfolio(accountId), accountId);
   }
+}
+
+// ============== Account Management ==============
+
+export function getAccounts(): { id: number; name: string; created_at: string }[] {
+  return load(KEYS.ACCOUNTS, [{ id: 1, name: '默认账户', created_at: new Date().toISOString() }]);
+}
+
+export function saveAccounts(accounts: { id: number; name: string; created_at: string }[]): void {
+  save(KEYS.ACCOUNTS, accounts);
+}
+
+export function getCurrentAccountId(): number {
+  return load(KEYS.CURRENT_ACCOUNT_ID, 1);
+}
+
+export function setCurrentAccountId(id: number): void {
+  save(KEYS.CURRENT_ACCOUNT_ID, id);
 }
