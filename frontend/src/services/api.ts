@@ -15,6 +15,7 @@ import type {
   OptimizeResultsResponse, OptimizeResultItem,
   HeatmapPoint, ScatterPoint,
   StockScreenerRequest, StockScreenerResponse,
+  Position,
 } from "../types";
 import {
   getPortfolio as s_getPortfolio,
@@ -46,6 +47,13 @@ import {
   quantStockSelection,
 } from "./indicators";
 import { fetchKlineData, searchSymbols } from "./yahooFinance";
+import {
+  createTradeMemory,
+  updateMemoryOutcome,
+  findMemoryByPositionId,
+  calculateDecisionFactors,
+  type MemoryOutcome,
+} from "./memoryService";
 
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
 
@@ -194,15 +202,18 @@ export const executeTrade = async (req: TradeRequest, accountId: number = 1): Pr
       throw new Error("资金不足");
     }
     const existingPos = portfolio.positions.find((p: { symbol: string }) => p.symbol === req.symbol);
+    let positionId: number;
     if (existingPos) {
       const totalShares = existingPos.quantity + req.quantity;
       existingPos.avg_cost = (existingPos.avg_cost * existingPos.quantity + price * req.quantity) / totalShares;
       existingPos.quantity = totalShares;
       existingPos.current_price = price;
       existingPos.market_value = totalShares * price;
+      positionId = existingPos.id;
     } else {
+      positionId = Date.now();
       portfolio.positions.push({
-        id: Date.now(),
+        id: positionId,
         symbol: req.symbol,
         name: req.name || stock.name,
         quantity: req.quantity,
@@ -214,6 +225,37 @@ export const executeTrade = async (req: TradeRequest, accountId: number = 1): Pr
       });
     }
     portfolio.cash -= totalCost;
+
+    // === 策略记忆系统：买入时创建记忆 ===
+    try {
+      const history = generatePriceHistory(price, 60);
+      const position: Position = {
+        id: positionId,
+        symbol: req.symbol,
+        name: req.name || stock.name,
+        quantity: req.quantity,
+        avg_cost: price,
+        current_price: price,
+        market_value: req.quantity * price,
+        profit_loss: 0,
+        profit_loss_pct: 0,
+      };
+      const factors = calculateDecisionFactors(position, history);
+      const tradeForMem: Trade = {
+        id: Date.now(),
+        symbol: req.symbol,
+        name: req.name || stock.name,
+        trade_type: tradeType,
+        price,
+        quantity: req.quantity,
+        commission,
+        total_cost: totalCost,
+        timestamp: new Date().toISOString(),
+      };
+      createTradeMemory(tradeForMem, position, factors);
+    } catch (e) {
+      console.warn('Failed to create trade memory:', e);
+    }
   } else {
     const pos = portfolio.positions.find((p: { symbol: string }) => p.symbol === req.symbol);
     if (!pos || pos.quantity < req.quantity) {
@@ -222,7 +264,32 @@ export const executeTrade = async (req: TradeRequest, accountId: number = 1): Pr
     const netProceed = req.quantity * price * 0.9997;
     portfolio.cash += netProceed;
     pos.quantity -= req.quantity;
-    if (pos.quantity === 0) {
+    const isFullyClosed = pos.quantity === 0;
+
+    // === 策略记忆系统：卖出时更新记忆 ===
+    if (isFullyClosed) {
+      try {
+        const memory = findMemoryByPositionId(String(pos.id));
+        if (memory) {
+          const buyPrice = memory.pnlPercent || pos.avg_cost; // pnlPercent holds buy price
+          const actualPnlPct = ((price - buyPrice) / buyPrice) * 100;
+          const createdTime = new Date(memory.created_at).getTime();
+          const holdingDays = Math.max(1, Math.floor((Date.now() - createdTime) / 86400000));
+          
+          // Determine outcome
+          let outcome: MemoryOutcome = 'loss';
+          if (actualPnlPct > 2) outcome = 'take_profit';
+          else if (actualPnlPct < -2) outcome = 'stop_loss';
+          else if (actualPnlPct >= 0) outcome = 'profit';
+          
+          updateMemoryOutcome(memory.id, outcome, actualPnlPct, holdingDays);
+        }
+      } catch (e) {
+        console.warn('Failed to update trade memory:', e);
+      }
+    }
+
+    if (isFullyClosed) {
       portfolio.positions = portfolio.positions.filter((p: { symbol: string }) => p.symbol !== req.symbol);
     }
   }

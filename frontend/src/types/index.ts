@@ -566,7 +566,7 @@ export interface StrategyMarketStats {
 
 // ============== Memory / Notes ==============
 
-export type MemoryType = "insight" | "note" | "trade_log" | "analysis" | "idea";
+export type MemoryType = "insight" | "note" | "trade_log" | "analysis" | "idea" | "trade_decision";
 
 export interface MemoryTag {
   id: string;
@@ -585,6 +585,14 @@ export interface MemoryEntry {
   updated_at: string;
   is_pinned?: boolean;
   is_favorite?: boolean;
+  // === 策略记忆系统增强字段 ===
+  linkedTradeId?: string;
+  linkedPositionId?: string;
+  outcome?: 'pending' | 'profit' | 'loss' | 'stop_loss' | 'take_profit';
+  pnlPercent?: number;
+  holdingDays?: number;
+  decisionFactors?: string[];
+  auto?: boolean;        // 标记是否自动生成
 }
 
 export interface MemoryStats {

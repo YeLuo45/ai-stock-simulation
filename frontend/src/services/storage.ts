@@ -211,6 +211,7 @@ const DEFAULT_MEMORY_TAGS: Record<MemoryType, { label: string; color: string }> 
   trade_log: { label: "📋 交易记录", color: "#10b981" },
   analysis: { label: "📊 分析", color: "#8b5cf6" },
   idea: { label: "💭 想法", color: "#ec4899" },
+  trade_decision: { label: "📈 交易决策", color: "#14b8a6" },
 };
 
 export const MEMORY_TYPE_META = DEFAULT_MEMORY_TAGS;

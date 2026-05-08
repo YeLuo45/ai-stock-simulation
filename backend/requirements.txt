@@ -6,6 +6,7 @@ python-multipart==0.0.26
 pydantic==2.12.5
 pydantic-settings==2.13.1
 akshare==1.18.54
+yfinance>=0.2.40
 langchain==1.2.15
 langchain-core==1.2.28
 langchain-community==0.4.1

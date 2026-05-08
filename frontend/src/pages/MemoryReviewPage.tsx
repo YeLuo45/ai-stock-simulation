@@ -5,8 +5,12 @@
  */
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
-import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download } from "lucide-react";
+import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download, PieChart, List } from "lucide-react";
 import clsx from "clsx";
+import OutcomeBadge from "../components/OutcomeBadge";
+import { computeMemoryStats, type MemoryStatsData } from "../services/memoryService";
+import { getMemoryEntries } from "../services/storage";
+import { PieChart as RechartsPie, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export interface MemoryEntry {
   id: string;
@@ -15,6 +19,14 @@ export interface MemoryEntry {
   content: string;
   timestamp: string;
   metadata?: Record<string, unknown>;
+  // 策略记忆系统增强字段
+  linkedTradeId?: string;
+  linkedPositionId?: string;
+  outcome?: 'pending' | 'profit' | 'loss' | 'stop_loss' | 'take_profit';
+  pnlPercent?: number;
+  holdingDays?: number;
+  decisionFactors?: string[];
+  auto?: boolean;
 }
 
 const MEMORY_KEY = "ai-stock-memory-entries";
@@ -50,15 +62,68 @@ export default function MemoryReviewPage() {
   const { showNotification } = useStore();
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [filterType, setFilterType] = useState<MemoryEntry["type"] | "all">("all");
+  const [filterOutcome, setFilterOutcome] = useState<MemoryEntry["outcome"] | "all">("all");
   const [searchKw, setSearchKw] = useState("");
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewTab, setViewTab] = useState<"list" | "stats">("list");
+  const [stats, setStats] = useState<MemoryStatsData | null>(null);
 
   const loadEntries = () => {
     const data = loadMemoryEntries();
     // Sort by timestamp descending
     data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     setEntries(data);
+    // Refresh stats
+    try {
+      const allEntries = getMemoryEntries();
+      const autoEntries = allEntries.filter(e => e.auto === true);
+      const computedStats: MemoryStatsData = {
+        total: autoEntries.length,
+        pending: 0,
+        profit: 0,
+        loss: 0,
+        stopLoss: 0,
+        takeProfit: 0,
+        avgHoldingDays: 0,
+        winRate: 0,
+        factorStats: {},
+      };
+      let totalHoldingDays = 0;
+      let closedCount = 0;
+      for (const e of autoEntries) {
+        switch (e.outcome) {
+          case 'pending': computedStats.pending++; break;
+          case 'profit': computedStats.profit++; closedCount++; break;
+          case 'loss': computedStats.loss++; closedCount++; break;
+          case 'stop_loss': computedStats.stopLoss++; closedCount++; break;
+          case 'take_profit': computedStats.takeProfit++; closedCount++; break;
+        }
+        if (e.holdingDays) totalHoldingDays += e.holdingDays;
+        if (e.decisionFactors) {
+          for (const factor of e.decisionFactors) {
+            if (!computedStats.factorStats[factor]) {
+              computedStats.factorStats[factor] = { total: 0, wins: 0, winRate: 0 };
+            }
+            computedStats.factorStats[factor].total++;
+            if (e.outcome === 'profit' || e.outcome === 'take_profit') {
+              computedStats.factorStats[factor].wins++;
+            }
+          }
+        }
+      }
+      if (closedCount > 0) {
+        computedStats.winRate = ((computedStats.profit + computedStats.takeProfit) / closedCount) * 100;
+        computedStats.avgHoldingDays = totalHoldingDays / closedCount;
+      }
+      for (const factor of Object.keys(computedStats.factorStats)) {
+        const fs = computedStats.factorStats[factor];
+        if (fs.total > 0) fs.winRate = (fs.wins / fs.total) * 100;
+      }
+      setStats(computedStats);
+    } catch (e) {
+      console.warn('Failed to compute memory stats:', e);
+    }
   };
 
   useEffect(() => {
@@ -125,6 +190,7 @@ export default function MemoryReviewPage() {
 
   const filtered = entries.filter(e => {
     if (filterType !== "all" && e.type !== filterType) return false;
+    if (filterOutcome !== "all" && e.outcome !== filterOutcome) return false;
     if (searchKw && !e.title.toLowerCase().includes(searchKw.toLowerCase()) && !e.content.toLowerCase().includes(searchKw.toLowerCase())) return false;
     return true;
   });
@@ -193,6 +259,31 @@ export default function MemoryReviewPage() {
           >
             <Trash2 size={12} /> 清空
           </button>
+          {/* View tab toggle */}
+          <div className="flex items-center gap-1 ml-2 px-1 py-1 rounded-lg bg-bg-tertiary border border-border-color">
+            <button
+              onClick={() => setViewTab("list")}
+              className={clsx(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                viewTab === "list"
+                  ? "bg-accent-primary/10 text-accent-primary"
+                  : "text-text-muted hover:text-text-secondary"
+              )}
+            >
+              <List size={12} /> 列表
+            </button>
+            <button
+              onClick={() => setViewTab("stats")}
+              className={clsx(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                viewTab === "stats"
+                  ? "bg-accent-primary/10 text-accent-primary"
+                  : "text-text-muted hover:text-text-secondary"
+              )}
+            >
+              <PieChart size={12} /> 统计
+            </button>
+          </div>
         </div>
       </div>
 
@@ -245,6 +336,25 @@ export default function MemoryReviewPage() {
             >
               <span className={TYPE_CONFIG[type].color}>{TYPE_CONFIG[type].icon}</span>
               {TYPE_CONFIG[type].label}
+            </button>
+          ))}
+        </div>
+
+        {/* Outcome filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-text-muted">结果:</span>
+          {(["all", "pending", "profit", "loss", "stop_loss", "take_profit"] as const).map(outcome => (
+            <button
+              key={outcome}
+              onClick={() => { setFilterOutcome(outcome); setPage(1); }}
+              className={clsx(
+                "px-2 py-1 rounded-lg text-xs font-medium transition-colors",
+                filterOutcome === outcome
+                  ? "bg-accent-primary/10 text-accent-primary border border-accent-primary/30"
+                  : "text-text-muted hover:text-text-secondary border border-transparent hover:border-border-color"
+              )}
+            >
+              {outcome === 'all' ? '全部' : outcome === 'pending' ? '🟡待验证' : outcome === 'profit' ? '🟢盈利' : outcome === 'loss' ? '🔴亏损' : outcome === 'stop_loss' ? '⏸止损' : '🏆止盈'}
             </button>
           ))}
         </div>
@@ -303,6 +413,7 @@ export default function MemoryReviewPage() {
                       )}>
                         {config.label}
                       </span>
+                      {entry.auto && <OutcomeBadge outcome={entry.outcome} size="sm" />}
                     </div>
                     <p className={clsx(
                       "text-xs text-text-muted",

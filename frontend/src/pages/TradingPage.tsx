@@ -6,7 +6,9 @@
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
 import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } from "../services/api";
+import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
+import type { MemoryEntry } from "../types";
 import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain } from "lucide-react";
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
@@ -28,6 +30,10 @@ export default function TradingPage() {
   const [editingAccountName, setEditingAccountName] = useState("");
   const [newAccountName, setNewAccountName] = useState("");
 
+  // Similar memories for positions
+  const [expandedPositionId, setExpandedPositionId] = useState<number | null>(null);
+  const [similarMemories, setSimilarMemories] = useState<Record<number, MemoryEntry[]>>({});
+
   // History tab filters & pagination
   const [historyFilter, setHistoryFilter] = useState<"all" | "buy" | "sell">("all");
   const [historyPage, setHistoryPage] = useState(1);
@@ -37,6 +43,14 @@ export default function TradingPage() {
     try {
       const data = await getPortfolio(currentAccountId);
       setPortfolio(data);
+      // Load similar memories for each position
+      if (data.positions) {
+        const similar: Record<number, MemoryEntry[]> = {};
+        for (const pos of data.positions) {
+          similar[pos.id] = findSimilarMemories(pos.symbol, []);
+        }
+        setSimilarMemories(similar);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -289,8 +303,35 @@ export default function TradingPage() {
                 {portfolio.positions.map((pos) => (
                   <tr key={pos.id} className="border-b border-border-color/50 hover:bg-bg-tertiary/30 transition-colors">
                     <td className="px-4 py-4">
-                      <p className="font-medium text-text-primary text-sm">{pos.name}</p>
-                      <p className="text-xs text-text-muted font-mono">{pos.symbol}</p>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-medium text-text-primary text-sm">{pos.name}</p>
+                          <p className="text-xs text-text-muted font-mono">{pos.symbol}</p>
+                        </div>
+                        {similarMemories[pos.id] && similarMemories[pos.id].length > 0 && (
+                          <button
+                            onClick={() => setExpandedPositionId(expandedPositionId === pos.id ? null : pos.id)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-primary/10 text-accent-primary text-xs hover:bg-accent-primary/20 transition-colors"
+                            title="查看历史参考"
+                          >
+                            💡 历史参考 ({similarMemories[pos.id].length})
+                          </button>
+                        )}
+                      </div>
+                      {/* Expanded memory summary */}
+                      {expandedPositionId === pos.id && similarMemories[pos.id] && similarMemories[pos.id].length > 0 && (
+                        <div className="mt-2 p-2 rounded bg-bg-tertiary/50 border border-border-color/30 text-xs space-y-1">
+                          {similarMemories[pos.id].slice(0, 3).map(mem => (
+                            <div key={mem.id} className="flex items-start gap-2">
+                              <span className="text-text-muted">{mem.outcome === 'profit' || mem.outcome === 'take_profit' ? '🟢' : mem.outcome === 'loss' || mem.outcome === 'stop_loss' ? '🔴' : '🟡'}</span>
+                              <div>
+                                <p className="text-text-secondary">{mem.decisionFactors?.join(', ') || '无明显信号'}</p>
+                                <p className="text-text-muted">{mem.holdingDays ? `持仓${mem.holdingDays}天` : ''} {mem.pnlPercent ? `收益${mem.pnlPercent > 0 ? '+' : ''}${mem.pnlPercent.toFixed(1)}%` : ''}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="text-right px-4 py-4 text-sm text-text-secondary font-mono">{pos.quantity}</td>
                     <td className="text-right px-4 py-4 text-sm text-text-secondary font-mono">¥{pos.avg_cost.toFixed(2)}</td>

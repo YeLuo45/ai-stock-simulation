@@ -45,6 +45,7 @@ def _seed_data_sources():
                 DataSource(id="east_money", name="东方财富", enabled=True, priority=1),
                 DataSource(id="tonghuashun", name="同花顺", enabled=True, priority=2),
                 DataSource(id="joinquant", name="聚宽", enabled=True, priority=3),
+                DataSource(id="yahoo_finance", name="Yahoo Finance", enabled=True, priority=4),
             ]
             for ds in defaults:
                 db.add(ds)

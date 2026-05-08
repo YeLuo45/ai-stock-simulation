@@ -108,6 +108,9 @@ class DataSourceManager:
         elif source_id == "joinquant":
             from . import joinquant
             adapter = joinquant.JoinQuantAdapter()
+        elif source_id == "yahoo_finance":
+            from . import yahoo_finance
+            adapter = yahoo_finance.YahooFinanceAdapter()
 
         if adapter:
             self._source_cache[source_id] = adapter
