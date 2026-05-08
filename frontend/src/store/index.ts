@@ -2,7 +2,7 @@
  * Global state store using Zustand
  */
 import { create } from "zustand";
-import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool } from "../types";
+import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool, AppliedStrategy, StrategyParams } from "../types";
 
 export interface PriceAlert {
   id: string;
@@ -106,6 +106,13 @@ interface AppState {
   notification: { type: "success" | "error" | "info"; message: string } | null;
   showNotification: (type: "success" | "error" | "info", message: string) => void;
   clearNotification: () => void;
+
+  // Strategy from Evolution
+  appliedStrategy: AppliedStrategy | null;
+  strategyParams: StrategyParams | null;
+  strategyHistory: AppliedStrategy[];
+  applyStrategy: (strategy: AppliedStrategy) => void;
+  clearStrategy: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -275,4 +282,53 @@ export const useStore = create<AppState>((set) => ({
     setTimeout(() => set({ notification: null }), 4000);
   },
   clearNotification: () => set({ notification: null }),
+
+  // Strategy from Evolution
+  appliedStrategy: (() => {
+    try {
+      const saved = localStorage.getItem('appliedStrategy');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  })(),
+  strategyParams: (() => {
+    try {
+      const saved = localStorage.getItem('strategyParams');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  })(),
+  strategyHistory: (() => {
+    try {
+      const saved = localStorage.getItem('strategyHistory');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  })(),
+  applyStrategy: (strategy) => set((state) => {
+    const newHistory = [strategy, ...state.strategyHistory].slice(0, 50); // Keep last 50
+    try {
+      localStorage.setItem('appliedStrategy', JSON.stringify(strategy));
+      localStorage.setItem('strategyParams', JSON.stringify(strategy.params));
+      localStorage.setItem('strategyHistory', JSON.stringify(newHistory));
+    } catch {}
+    return {
+      appliedStrategy: strategy,
+      strategyParams: strategy.params,
+      strategyHistory: newHistory,
+    };
+  }),
+  clearStrategy: () => set(() => {
+    try {
+      localStorage.removeItem('appliedStrategy');
+      localStorage.removeItem('strategyParams');
+    } catch {}
+    return {
+      appliedStrategy: null,
+      strategyParams: null,
+    };
+  }),
 }));

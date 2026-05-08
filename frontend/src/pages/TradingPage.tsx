@@ -14,7 +14,7 @@ import MemoryReviewPage from "./MemoryReviewPage";
 const PAGE_SIZE = 10;
 
 export default function TradingPage() {
-  const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount } = useStore();
+  const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
@@ -232,9 +232,45 @@ export default function TradingPage() {
     );
   };
 
+  // ============ Strategy Banner ============
+  const renderStrategyBanner = () => {
+    if (!appliedStrategy || !strategyParams) return null;
+    return (
+      <div className="bg-gradient-to-r from-accent-success/10 to-accent-primary/10 border border-accent-success/20 rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-accent-success/20 flex items-center justify-center">
+              <Brain size={16} className="text-accent-success" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-accent-success">策略已激活</span>
+                <span className="text-xs text-text-muted">来自遗传算法优化</span>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-text-muted mt-1">
+                <span>MA: {strategyParams.ma_fast}/{strategyParams.ma_slow}</span>
+                <span>RSI: {strategyParams.rsi_oversold}/{strategyParams.rsi_overbought}</span>
+                <span>BOLL: ±{strategyParams.bb_std}σ</span>
+                <span>Vol: ≥{strategyParams.volume_threshold}x</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => { clearStrategy(); showNotification('info', '已清除策略参数'); }}
+            className="p-1.5 rounded-lg text-text-muted hover:text-accent-danger hover:bg-accent-danger/10 transition-colors"
+            title="清除策略"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // ============ Positions ============
   const renderPositions = () => (
     <div className="space-y-4">
+      {renderStrategyBanner()}
       {portfolio && portfolio.positions.length > 0 ? (
         <>
           <div className="overflow-x-auto">
@@ -312,6 +348,38 @@ export default function TradingPage() {
 
     return (
       <div className="p-6 space-y-5">
+        {/* Strategy Banner in Trade Form */}
+        {appliedStrategy && strategyParams && (
+          <div className="bg-gradient-to-r from-accent-success/10 to-transparent border border-accent-success/20 rounded-xl p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Brain size={14} className="text-accent-success" />
+                <span className="text-xs text-accent-success font-medium">策略参数已激活</span>
+              </div>
+              <button
+                onClick={() => { clearStrategy(); showNotification('info', '已清除策略参数'); }}
+                className="text-text-muted hover:text-accent-danger"
+              >
+                <X size={12} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+              <div className="bg-bg-tertiary/50 rounded px-2 py-1">
+                <span className="text-text-muted">MA </span>
+                <span className="text-text-primary font-mono">{strategyParams.ma_fast}/{strategyParams.ma_slow}</span>
+              </div>
+              <div className="bg-bg-tertiary/50 rounded px-2 py-1">
+                <span className="text-text-muted">RSI </span>
+                <span className="text-text-primary font-mono">{strategyParams.rsi_oversold}/{strategyParams.rsi_overbought}</span>
+              </div>
+              <div className="bg-bg-tertiary/50 rounded px-2 py-1">
+                <span className="text-text-muted">BOLL </span>
+                <span className="text-text-primary font-mono">±{strategyParams.bb_std}σ</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Buy/Sell Toggle */}
         <div className="flex gap-2">
           {(["buy", "sell"] as const).map(t => (

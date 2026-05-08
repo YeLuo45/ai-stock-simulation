@@ -348,6 +348,25 @@ export interface StockScreenerResponse {
   filters_applied: string[];
 }
 
+// ============== Strategy Params (from Evolution) =============
+
+export interface StrategyParams {
+  ma_fast: number;
+  ma_slow: number;
+  rsi_oversold: number;
+  rsi_overbought: number;
+  bb_std: number;
+  volume_threshold: number;
+}
+
+export interface AppliedStrategy {
+  id: string;
+  timestamp: number;
+  fitness: number;
+  params: StrategyParams;
+  source: 'evolution';
+}
+
 // ============== Evolution / Genetic Algorithm ==============
 
 export interface GeneRange {

@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback } from 'react'
 import { useStore } from '../store'
+import type { AppliedStrategy, StrategyParams } from '../types'
 import {
   Play, X, TrendingUp, TrendingDown, BarChart2, Target, RotateCcw,
-  Dna, Zap, Award
+  Dna, Zap, Award, Rocket
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -240,7 +241,7 @@ function runGAEvolution(
 
 // ---- Component ----
 export default function EvolutionPage() {
-  const { showNotification, selectedStocks } = useStore()
+  const { showNotification, selectedStocks, applyStrategy } = useStore()
 
   // GA Config
   const [gaConfig, setGaConfig] = useState<GAConfig>({
@@ -264,6 +265,7 @@ export default function EvolutionPage() {
   const [generationResults, setGenerationResults] = useState<GAGenerationResult[]>([])
   const [finalResult, setFinalResult] = useState<GAEvolutionResult | null>(null)
   const [currentGen, setCurrentGen] = useState(0)
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false)
   const abortRef = useRef({ aborted: false })
 
   const handleStart = useCallback(() => {
@@ -307,6 +309,34 @@ export default function EvolutionPage() {
     abortRef.current.aborted = true
     setRunning(false)
     showNotification('info', '进化已取消')
+  }
+
+  const handleApplyStrategy = () => {
+    if (!finalResult) return
+    // Convert GAIndividual chromosome to StrategyParams
+    const params: StrategyParams = {
+      ma_fast: finalResult.best_solution.chromosome.ma_short,
+      ma_slow: finalResult.best_solution.chromosome.ma_long,
+      rsi_oversold: 30, // default values for RSI since GA doesn't optimize them
+      rsi_overbought: 70,
+      bb_std: 2.0, // default
+      volume_threshold: 1.5, // default
+    }
+    const strategy: AppliedStrategy = {
+      id: `evo-${Date.now()}`,
+      timestamp: Date.now(),
+      fitness: finalResult.best_solution.fitness,
+      params,
+      source: 'evolution',
+    }
+    applyStrategy(strategy)
+    showNotification('success', '最优策略已应用到模拟交易')
+    setShowApplyConfirm(false)
+  }
+
+  const handleShowApplyConfirm = () => {
+    if (!finalResult) return
+    setShowApplyConfirm(true)
   }
 
   const progressPct = gaConfig.generations > 0
@@ -688,6 +718,80 @@ export default function EvolutionPage() {
             <RotateCcw size={16} />
             应用此参数到回测
           </button>
+
+          <button
+            onClick={handleShowApplyConfirm}
+            className="mt-3 w-full px-4 py-3 bg-accent-success/10 text-accent-success border border-accent-success/30 font-medium rounded-lg hover:bg-accent-success/20 transition-colors flex items-center justify-center gap-2"
+          >
+            <Rocket size={16} />
+            应用最优策略到模拟交易
+          </button>
+        </div>
+      )}
+
+      {/* Apply Strategy Confirmation Modal */}
+      {showApplyConfirm && finalResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-accent-success/20 flex items-center justify-center">
+                <Rocket size={20} className="text-accent-success" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">应用最优策略</h3>
+                <p className="text-text-muted text-xs">确认将最优参数同步到模拟交易</p>
+              </div>
+            </div>
+
+            <div className="bg-bg-tertiary rounded-xl p-4 mb-4 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-text-muted text-sm">适应度</span>
+                <span className="text-accent-success font-mono font-bold">{finalResult.best_solution.fitness.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-text-muted text-sm">总收益率</span>
+                <span className="text-text-primary font-mono">{finalResult.best_solution.total_return.toFixed(1)}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-text-muted text-sm">夏普比率</span>
+                <span className="text-text-primary font-mono">{finalResult.best_solution.sharpe_ratio.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-border-color/50 pt-2 mt-2 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">MA_fast</span>
+                  <span className="text-text-secondary font-mono">{finalResult.best_solution.chromosome.ma_short}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">MA_slow</span>
+                  <span className="text-text-secondary font-mono">{finalResult.best_solution.chromosome.ma_long}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">止损</span>
+                  <span className="text-text-secondary font-mono">{(finalResult.best_solution.chromosome.stop_loss * 100).toFixed(0)}%</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">止盈</span>
+                  <span className="text-text-secondary font-mono">{(finalResult.best_solution.chromosome.take_profit * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowApplyConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-border-color text-text-secondary rounded-lg hover:bg-bg-tertiary/80 transition-colors text-sm font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleApplyStrategy}
+                className="flex-1 px-4 py-2.5 bg-accent-success text-white rounded-lg hover:bg-accent-success/90 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+              >
+                <Rocket size={14} />
+                确认应用
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
