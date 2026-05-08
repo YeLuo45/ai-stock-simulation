@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store'
 import { runBacktest, getBacktestResults, explainBacktest } from '../services/api'
 import { BarChart2, Play, Loader2, TrendingUp, TrendingDown, Target, Zap, Download, FileText } from 'lucide-react'
@@ -52,8 +52,74 @@ export default function BacktestPage() {
   const handleGenerateReport = () => {
     if (!results) return
     setReportMode(true)
-    setTimeout(() => window.print(), 100)
   }
+
+  // Manage body background and hidden elements when in report mode
+  useEffect(() => {
+    if (!reportMode) return
+
+    // Delay to ensure React has rendered the report div
+    const timer = setTimeout(() => {
+      // Find the report element (contains "print:block" class)
+      const reportEl = document.querySelector('[class*="print:block"]') as HTMLElement | null
+
+      if (!reportEl) return
+
+      // Collect all elements to hide (everything except the report and its ancestors)
+      const toRestore: Array<{ el: HTMLElement; display: string }> = []
+
+      // Get all ancestors of the report element (for restoration later)
+      const ancestors = new Set<Element>()
+      let el: Element | null = reportEl.parentElement
+      while (el) {
+        ancestors.add(el)
+        el = el.parentElement
+      }
+
+      // Hide body children that are NOT ancestors of the report
+      document.body.querySelectorAll(':scope > *').forEach(child => {
+        if (!ancestors.has(child)) {
+          const htmlEl = child as HTMLElement
+          toRestore.push({ el: htmlEl, display: htmlEl.style.display })
+          htmlEl.style.display = 'none'
+        }
+      })
+
+      // Force white background for print
+      const origBg = document.body.style.background
+      document.body.style.background = 'white'
+
+      window.print()
+
+      // Restore when print dialog closes (via afterprint event)
+      const restore = () => {
+        toRestore.forEach(({ el: e, display }) => {
+          e.style.display = display
+        })
+        document.body.style.background = origBg
+      }
+
+      const afterPrintHandler = () => {
+        restore()
+        window.removeEventListener('afterprint', afterPrintHandler)
+      }
+      window.addEventListener('afterprint', afterPrintHandler)
+
+      // Fallback: also restore on cancel (setTimeout as backup)
+      const fallbackTimer = setTimeout(() => {
+        window.removeEventListener('afterprint', afterPrintHandler)
+        restore()
+      }, 3000)
+
+      return () => {
+        clearTimeout(fallbackTimer)
+        window.removeEventListener('afterprint', afterPrintHandler)
+        restore()
+      }
+    }, 200)
+
+    return () => clearTimeout(timer)
+  }, [reportMode])
 
   const handleExportEquityCSV = () => {
     if (!results) return

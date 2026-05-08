@@ -109,14 +109,28 @@ input::placeholder, textarea::placeholder {
 
 /* Print styles for backtest report */
 @media print {
-  /* Hide all non-report content */
-  body > *:not(.print\:block) {
+  /* Hide everything */
+  body > * > * {
     display: none !important;
   }
 
-  /* Report styles */
-  .print\:block {
+  /* Show only the report content area - use @page to control the print container */
+  @media print {
+    body {
+      background: white !important;
+    }
+  }
+
+  /* Explicitly show report blocks at any nesting level */
+  .print\:block,
+  .print\:block * {
     display: block !important;
+  }
+
+  /* Exception: restore inline for inline elements */
+  .print\:inline,
+  .print\:inline * {
+    display: inline !important;
   }
 
   .print\:text-black {

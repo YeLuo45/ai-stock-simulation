@@ -15,6 +15,7 @@ import MarketPage from './pages/MarketPage'
 import CapitalFlowPage from './pages/CapitalFlowPage'
 import ContestPage from './pages/ContestPage'
 import PortfolioOptimizerPage from './pages/PortfolioOptimizerPage'
+import EvolutionPage from './pages/EvolutionPage'
 import Notification from './components/Notification'
 import { getPortfolio } from './services/api'
 
@@ -68,6 +69,8 @@ function App() {
         return <ContestPage />
       case 'portfolio_optimizer':
         return <PortfolioOptimizerPage />
+      case 'evolution':
+        return <EvolutionPage />
       default:
         return <HomePage />
     }

@@ -147,7 +147,7 @@ export interface AIModelConfig {
   has_api_key: boolean;
 }
 
-export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer";
+export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution";
 
 // ============== Stock Pool ==============
 
@@ -336,6 +336,67 @@ export interface StockScreenerResponse {
   stocks: StockInfo[];
   total_count: number;
   filters_applied: string[];
+}
+
+// ============== Evolution / Genetic Algorithm ==============
+
+export interface GeneRange {
+  name: string;
+  min: number;
+  max: number;
+  step: number;
+  integer?: boolean;
+}
+
+export interface EvolutionConfig {
+  populationSize: number;
+  generations: number;
+  crossoverRate: number;
+  mutationRate: number;
+  elitismCount: number;
+  tournamentSize: number;
+  geneRanges: GeneRange[];
+  optimizationDirection: 'maximize' | 'minimize';
+  objectiveWeights?: number[];
+}
+
+export interface Chromosome {
+  genes: number[];
+  fitness: number;
+  metrics?: OptimizeMetrics;
+}
+
+export interface EvolutionState {
+  generation: number;
+  population: Chromosome[];
+  bestChromosome: Chromosome;
+  bestEver: Chromosome;
+  history: { generation: number; bestFitness: number; avgFitness: number }[];
+  diversityScore: number;
+}
+
+export interface GAOptimizationRequest {
+  strategy_name?: string;
+  symbols?: string[];
+  symbol?: string;
+  start_date?: string;
+  end_date?: string;
+  initial_cash?: number;
+  /** Override GA config */
+  ga_config?: Partial<EvolutionConfig>;
+  /** Use hybrid (grid search + GA) */
+  hybrid?: boolean;
+}
+
+export interface GAOptimizationResponse {
+  batch_id: string;
+  status: 'running' | 'completed' | 'aborted';
+  generation: number;
+  total_generations: number;
+  best_fitness: number;
+  best_params?: Record<string, number>;
+  best_metrics?: OptimizeMetrics;
+  progress_pct: number;
 }
 
 // ============== Saved Strategy ==============
