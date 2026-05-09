@@ -2,7 +2,7 @@
  * Global state store using Zustand
  */
 import { create } from "zustand";
-import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool, AppliedStrategy, StrategyParams } from "../types";
+import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool, AppliedStrategy, StrategyParams, StrategySignal, FollowTrade } from "../types";
 
 export interface PriceAlert {
   id: string;
@@ -113,6 +113,16 @@ interface AppState {
   strategyHistory: AppliedStrategy[];
   applyStrategy: (strategy: AppliedStrategy) => void;
   clearStrategy: () => void;
+
+  // Strategy Market - Follow Trading signals
+  strategySignals: StrategySignal[];
+  addStrategySignal: (signal: StrategySignal) => void;
+  expireSignal: (id: string) => void;
+  executeSignal: (id: string) => void;
+  clearExpiredSignals: () => void;
+  followTrades: FollowTrade[];
+  addFollowTrade: (trade: FollowTrade) => void;
+  updateFollowTrade: (id: string, update: Partial<FollowTrade>) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -330,5 +340,49 @@ export const useStore = create<AppState>((set) => ({
       appliedStrategy: null,
       strategyParams: null,
     };
+  }),
+
+  // Follow Trading signals
+  strategySignals: (() => {
+    try {
+      const saved = localStorage.getItem('strategy-signals');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  })(),
+  addStrategySignal: (signal) => set((state) => {
+    const newList = [signal, ...state.strategySignals].slice(0, 200);
+    try { localStorage.setItem('strategy-signals', JSON.stringify(newList)); } catch {}
+    return { strategySignals: newList };
+  }),
+  expireSignal: (id) => set((state) => {
+    const newList = state.strategySignals.map(s => s.id === id ? { ...s, expired: true } : s);
+    try { localStorage.setItem('strategy-signals', JSON.stringify(newList)); } catch {}
+    return { strategySignals: newList };
+  }),
+  executeSignal: (id) => set((state) => {
+    const newList = state.strategySignals.map(s => s.id === id ? { ...s, executed: true } : s);
+    try { localStorage.setItem('strategy-signals', JSON.stringify(newList)); } catch {}
+    return { strategySignals: newList };
+  }),
+  clearExpiredSignals: () => set((state) => {
+    const newList = state.strategySignals.filter(s => !s.expired);
+    try { localStorage.setItem('strategy-signals', JSON.stringify(newList)); } catch {}
+    return { strategySignals: newList };
+  }),
+  followTrades: (() => {
+    try {
+      const saved = localStorage.getItem('follow-trades');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  })(),
+  addFollowTrade: (trade) => set((state) => {
+    const newList = [trade, ...state.followTrades].slice(0, 500);
+    try { localStorage.setItem('follow-trades', JSON.stringify(newList)); } catch {}
+    return { followTrades: newList };
+  }),
+  updateFollowTrade: (id, update) => set((state) => {
+    const newList = state.followTrades.map(t => t.id === id ? { ...t, ...update } : t);
+    try { localStorage.setItem('follow-trades', JSON.stringify(newList)); } catch {}
+    return { followTrades: newList };
   }),
 }));

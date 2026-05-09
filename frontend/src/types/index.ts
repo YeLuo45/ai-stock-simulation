@@ -564,6 +564,57 @@ export interface StrategyMarketStats {
   categories: Record<StrategyCategory, number>;
 }
 
+// ============== Follow Trading / Strategy Signals ==============
+
+export interface StrategySignal {
+  id: string;
+  strategy_id: string;
+  strategy_name: string;
+  strategy_author: string;
+  category: StrategyCategory;
+  /** 'buy' | 'sell' | 'watch' */
+  action: 'buy' | 'sell' | 'watch';
+  symbol: string;
+  name: string;
+  /** Suggested entry price */
+  price: number;
+  /** Target price (for sell) or stop loss */
+  target_price?: number;
+  stop_loss?: number;
+  /** Signal confidence 0-100 */
+  confidence: number;
+  /** Why this signal was generated */
+  reason: string;
+  /** Key conditions that triggered this signal */
+  trigger_conditions: string[];
+  /** ISO timestamp */
+  generated_at: string;
+  /** true once user has executed the trade */
+  executed: boolean;
+  /** true if signal has expired */
+  expired: boolean;
+  /** Strategy's risk level for this signal */
+  risk_level: StrategyRiskLevel;
+}
+
+export interface FollowTrade {
+  id: string;
+  signal_id: string;
+  strategy_id: string;
+  strategy_name: string;
+  symbol: string;
+  name: string;
+  action: 'buy' | 'sell';
+  price: number;
+  quantity: number;
+  executed_at: string;
+  /** P&L if closed */
+  pnl?: number;
+  pnl_pct?: number;
+  /** Linking to trade record */
+  trade_id?: number;
+}
+
 // ============== Memory / Notes ==============
 
 export type MemoryType = "insight" | "note" | "trade_log" | "analysis" | "idea" | "trade_decision";
