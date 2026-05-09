@@ -824,3 +824,45 @@ export interface FactorScreenerResult {
   rank: number;
 }
 
+// ============== Walk Forward Analysis ==============
+
+export interface WalkForwardConfig {
+  windowSize: number;        // Total window days (train+test), default 504
+  trainRatio: number;        // Training set ratio, default 0.7
+  stepSize: number;          // Rolling step (days), default 21
+  rebalanceInterval: number; // Rebalance interval (days), default 5
+  minSamples: number;        // Minimum samples required, default 60
+}
+
+export interface WalkForwardWindow {
+  windowIndex: number;
+  trainPeriod: [string, string];  // [startDate, endDate]
+  testPeriod: [string, string];
+  trainReturn: number;
+  testReturn: number;
+  testEquityCurve: number[];
+  metrics: {
+    totalReturn: number;
+    annualReturn: number;
+    maxDrawdown: number;
+    sharpeRatio: number;
+    winRate: number;
+    totalTrades: number;
+  };
+}
+
+export interface WalkForwardAggregateMetrics {
+  avgOOSReturn: number;
+  avgOOSSharpe: number;
+  winRate: number;
+  maxDrawdown: number;
+  oosScore: number;  // OOS Sharpe vs IS Sharpe, stability indicator
+}
+
+export interface WalkForwardResult {
+  windows: WalkForwardWindow[];
+  combinedOOSReturns: number[];  // All test window returns concatenated
+  aggregateMetrics: WalkForwardAggregateMetrics;
+  inSamplevsOOSRatio: number;    // IS vs OOS return ratio, overfitting detection
+}
+
