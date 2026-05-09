@@ -377,12 +377,12 @@ function loadCachedStrategies(): StrategyMarketItem[] {
 }
 
 export default function StrategyMarketPage() {
-  const { subscribedStrategies, addSubscribedStrategy, removeSubscribedStrategy, showNotification } = useStore();
+  const { subscribedStrategies, addSubscribedStrategy, removeSubscribedStrategy, showNotification, strategySignals } = useStore();
 
   const [strategies, setStrategies] = useState<StrategyMarketItem[]>(loadCachedStrategies);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [activeTab, setActiveTab] = useState<'browse' | 'subscribed'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'subscribed' | 'signals'>('browse');
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyMarketItem | null>(null);
 
   const [filters, setFilters] = useState<StrategyMarketFilters>({
@@ -531,6 +531,22 @@ export default function StrategyMarketPage() {
             {subscribedStrategies.length > 0 && (
               <span className="bg-accent-secondary text-bg-primary text-xs px-1.5 py-0.5 rounded-full">
                 {subscribedStrategies.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setActiveTab('signals'); setSelectedStrategy(null); }}
+            className={clsx(
+              'px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
+              activeTab === 'signals'
+                ? 'bg-accent-primary text-bg-primary'
+                : 'bg-bg-secondary border border-border-color text-text-secondary hover:text-text-primary'
+            )}
+          >
+            信号
+            {strategySignals.length > 0 && (
+              <span className="bg-accent-secondary text-bg-primary text-xs px-1.5 py-0.5 rounded-full">
+                {strategySignals.length}
               </span>
             )}
           </button>
@@ -793,7 +809,7 @@ export default function StrategyMarketPage() {
       )}
 
       {/* Strategy Grid */}
-      {activeTab === 'browse' ? (
+      {activeTab === 'browse' && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredStrategies.length === 0 ? (
             <div className="col-span-full text-center py-12 text-text-muted">
@@ -812,8 +828,10 @@ export default function StrategyMarketPage() {
             ))
           )}
         </div>
-      ) : (
-        /* Subscribed Tab */
+      )}
+
+      {/* Subscribed Tab */}
+      {activeTab === 'subscribed' && (
         <div className="space-y-4">
           {subscribedList.length === 0 ? (
             <div className="text-center py-12 text-text-muted bg-bg-secondary rounded-xl border border-border-color">
@@ -880,6 +898,94 @@ export default function StrategyMarketPage() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {/* Signals Tab */}
+      {activeTab === 'signals' && (
+        <div className="space-y-4">
+          {strategySignals.length === 0 ? (
+            <div className="text-center py-12 text-text-muted bg-bg-secondary rounded-xl border border-border-color">
+              <Zap size={40} className="mx-auto mb-3 opacity-30" />
+              <p>暂无策略信号</p>
+              <button
+                onClick={() => setActiveTab('browse')}
+                className="mt-3 text-accent-primary hover:underline text-sm"
+              >
+                去浏览策略
+              </button>
+            </div>
+          ) : (
+            strategySignals.map(signal => {
+              const actionColor = signal.action === 'buy' ? 'text-emerald-400' : signal.action === 'sell' ? 'text-rose-400' : 'text-amber-400';
+              const actionBg = signal.action === 'buy' ? 'bg-emerald-400/10' : signal.action === 'sell' ? 'bg-rose-400/10' : 'bg-amber-400/10';
+              const actionLabel = signal.action === 'buy' ? '买入' : signal.action === 'sell' ? '卖出' : '观望';
+              return (
+                <div key={signal.id} className={clsx('rounded-xl border p-5', signal.expired ? 'border-border-color opacity-60' : 'border-border-color hover:border-accent-primary/30 transition-colors')}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={clsx('w-12 h-12 rounded-xl flex items-center justify-center', actionBg)}>
+                        <Zap size={24} className={actionColor} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-text-primary">{signal.symbol} - {signal.name}</h3>
+                          <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium', actionBg, actionColor)}>
+                            {actionLabel}
+                          </span>
+                          {signal.expired && (
+                            <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs text-text-muted">
+                              已过期
+                            </span>
+                          )}
+                          {signal.executed && (
+                            <span className="px-1.5 py-0.5 bg-emerald-400/10 text-emerald-400 rounded text-xs">
+                              已执行
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-text-muted text-sm mt-1">
+                          来自 {signal.strategy_name} · {new Date(signal.generated_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-center">
+                        <div style={{fontFamily:'monospace',fontWeight:700}} className={actionColor}>{signal.action === 'sell' ? '-' : '+'}{((signal.target_price && signal.price) ? (((signal.target_price - signal.price) / signal.price * 100)).toFixed(1) : signal.confidence.toFixed(0))}%</div>
+                        <div className="text-text-muted text-xs">置信度/预期</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-mono font-bold text-text-primary">¥{signal.price.toFixed(2)}</div>
+                        <div className="text-text-muted text-xs">价格</div>
+                      </div>
+                      {signal.target_price && (
+                        <div className="text-center">
+                          <div className="font-mono font-bold text-text-primary">¥{signal.target_price.toFixed(2)}</div>
+                          <div className="text-text-muted text-xs">目标价</div>
+                        </div>
+                      )}
+                      {signal.stop_loss && (
+                        <div className="text-center">
+                          <div className="font-mono font-bold text-rose-400">¥{signal.stop_loss.toFixed(2)}</div>
+                          <div className="text-text-muted text-xs">止损价</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {signal.trigger_conditions.map((c, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-bg-tertiary rounded text-xs text-text-secondary">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                  {signal.reason && (
+                    <p className="mt-2 text-sm text-text-secondary">{signal.reason}</p>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       )}
