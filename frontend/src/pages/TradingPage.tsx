@@ -10,16 +10,17 @@ import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } f
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
 import type { MemoryEntry } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3 } from "lucide-react";
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
+import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
 
 const PAGE_SIZE = 10;
 
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const brokerState = useBrokerStore();
-  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory">("positions");
+  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -941,6 +942,7 @@ export default function TradingPage() {
             { key: "trade" as const, label: "交易", icon: <ArrowUpDown size={14} /> },
             { key: "history" as const, label: "历史", icon: <History size={14} /> },
             { key: "memory" as const, label: "记忆", icon: <Brain size={14} /> },
+            { key: "analytics" as const, label: "分析", icon: <BarChart3 size={14} /> },
           ]).map(tabItem => (
             <button
               key={tabItem.key}
@@ -964,6 +966,7 @@ export default function TradingPage() {
           {tab === "trade" && renderTradeForm()}
           {tab === "history" && renderHistory()}
           {tab === "memory" && <MemoryReviewPage />}
+          {tab === "analytics" && <PositionAnalyticsPanel />}
         </div>
       </div>
     </div>
