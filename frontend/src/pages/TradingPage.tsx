@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
+import { useBrokerStore } from "../store";
 import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } from "../services/api";
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
@@ -17,6 +18,7 @@ const PAGE_SIZE = 10;
 
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
+  const brokerState = useBrokerStore();
   const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
@@ -40,6 +42,12 @@ export default function TradingPage() {
 
   const loadPortfolio = async () => {
     if (!currentAccountId) return;
+    // If broker is connected, use broker positions instead
+    if (brokerState.isConnected) {
+      await brokerState.refreshAccount();
+      await brokerState.refreshPositions();
+      return;
+    }
     try {
       const data = await getPortfolio(currentAccountId);
       setPortfolio(data);
@@ -95,16 +103,25 @@ export default function TradingPage() {
     if (!symbol || !quantity || !currentAccountId) return;
     setLoading(true);
     try {
-      await executeTrade({
-        symbol,
-        name: name || symbol,
-        trade_type: tradeType,
-        quantity: parseInt(quantity),
-      }, currentAccountId);
-      await loadPortfolio();
-      await loadTrades();
+      // If broker is connected, use real broker
+      if (brokerState.isConnected && brokerState.provider) {
+        await brokerState.placeOrder(symbol, tradeType, parseInt(quantity), 'market');
+        await brokerState.refreshPositions();
+        await brokerState.refreshAccount();
+        showNotification("success", `${tradeType === "buy" ? "买入" : "卖出"}成功（券商）`);
+      } else {
+        // Use simulated trading
+        await executeTrade({
+          symbol,
+          name: name || symbol,
+          trade_type: tradeType,
+          quantity: parseInt(quantity),
+        }, currentAccountId);
+        await loadPortfolio();
+        await loadTrades();
+        showNotification("success", `${tradeType === "buy" ? "买入" : "卖出"}成功`);
+      }
       setSymbol(""); setName(""); setQuantity("");
-      showNotification("success", `${tradeType === "buy" ? "买入" : "卖出"}成功`);
     } catch (e: unknown) {
       const msg = (e as { message?: string })?.message || "交易失败";
       showNotification("error", msg);
@@ -183,6 +200,58 @@ export default function TradingPage() {
 
   // ============ Account Card ============
   const renderAccountCard = () => {
+    // Show broker account info when connected
+    if (brokerState.isConnected && brokerState.brokerAccount) {
+      const acc = brokerState.brokerAccount;
+      const modeLabel = brokerState.isPaper ? 'Paper' : 'Live';
+      const cards = [
+        { label: "可用资金", value: acc.cash, icon: <Wallet size={16} />, color: "text-accent-primary", prefix: '$' },
+        { label: "总权益", value: acc.equity, icon: <TrendingUp size={16} />, color: "text-text-primary", prefix: '$' },
+        { label: "Buying Power", value: acc.buyingPower, icon: <Briefcase size={16} />, color: "text-accent-primary", prefix: '$' },
+      ];
+      return (
+        <div className="space-y-3">
+          {/* Broker Status Bar */}
+          <div className="flex items-center gap-3 overflow-x-auto pb-1">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-text-muted uppercase tracking-wider">券商:</span>
+              <div className="flex items-center gap-1.5">
+                <span className={clsx(
+                  'px-3 py-1.5 rounded-lg text-xs font-bold border',
+                  brokerState.isPaper
+                    ? 'bg-yellow-500/10 border-yellow-500/40 text-yellow-400'
+                    : 'bg-green-500/10 border-green-500/40 text-green-400'
+                )}>
+                  {modeLabel}
+                </span>
+                <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 border border-accent-primary/40 text-accent-primary">
+                  {brokerState.config.provider.toUpperCase()}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-accent-success">
+              <div className="w-2 h-2 rounded-full bg-accent-success animate-pulse" />
+              <span>实时同步</span>
+            </div>
+          </div>
+          {/* Broker Account Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {cards.map((card) => (
+              <div key={card.label} className="bg-bg-secondary border border-border-color rounded-xl p-4 relative overflow-hidden group hover:border-accent-primary/40 transition-all">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-accent-primary/60">{card.icon}</span>
+                  <span className="text-xs text-text-muted uppercase tracking-wider">{card.label}</span>
+                </div>
+                <p className={clsx("font-mono text-xl font-bold", card.color)}>
+                  {card.prefix || '¥'}{formatMoney(card.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     if (!portfolio) return null;
     const cards = [
       { label: "可用资金", value: portfolio.cash, icon: <Wallet size={16} />, color: "text-accent-primary" },
@@ -285,7 +354,69 @@ export default function TradingPage() {
   const renderPositions = () => (
     <div className="space-y-4">
       {renderStrategyBanner()}
-      {portfolio && portfolio.positions.length > 0 ? (
+      {/* Show broker positions when connected */}
+      {brokerState.isConnected && brokerState.brokerPositions.length > 0 ? (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border-color">
+                  {["股票", "持仓", "成本价", "现价", "市值", "盈亏额", "盈亏%", "操作"].map(h => (
+                    <th key={h} className={clsx(
+                      "text-left px-4 py-3 text-xs font-medium text-text-muted uppercase tracking-wider",
+                      h !== "股票" && h !== "操作" && "text-right"
+                    )}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {brokerState.brokerPositions.map((pos) => (
+                  <tr key={pos.symbol} className="border-b border-border-color/50 hover:bg-bg-tertiary/30 transition-colors">
+                    <td className="px-4 py-4">
+                      <div>
+                        <p className="font-medium text-text-primary text-sm">{pos.symbol}</p>
+                        <p className="text-xs text-text-muted font-mono">Alpaca</p>
+                      </div>
+                    </td>
+                    <td className="text-right px-4 py-4 text-sm text-text-secondary font-mono">{pos.quantity}</td>
+                    <td className="text-right px-4 py-4 text-sm text-text-secondary font-mono">${pos.avgCost.toFixed(2)}</td>
+                    <td className="text-right px-4 py-4 text-sm text-text-primary font-mono font-medium">${pos.currentPrice.toFixed(2)}</td>
+                    <td className="text-right px-4 py-4 text-sm text-text-secondary font-mono">${formatMoney(pos.marketValue)}</td>
+                    <td className={clsx("text-right px-4 py-4 text-sm font-mono font-medium", profitLossColor(pos.unrealizedPL))}>
+                      {profitLossSign(pos.unrealizedPL)}$${formatMoney(pos.unrealizedPL)}
+                    </td>
+                    <td className={clsx("text-right px-4 py-4 text-sm font-mono font-medium", profitLossColor(pos.unrealizedPLPct * 100))}>
+                      {profitLossSign(pos.unrealizedPLPct * 100)}{pos.unrealizedPLPct.toFixed(2)}%
+                    </td>
+                    <td className="text-right px-4 py-4">
+                      <button
+                        onClick={() => { setSymbol(pos.symbol); setTradeType("sell"); setTab("trade"); }}
+                        className="text-xs px-3 py-1.5 rounded border border-accent-danger/40 text-accent-danger hover:bg-accent-danger/10 transition-colors"
+                      >
+                        卖出
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-between items-center px-4 py-3 border-t border-border-color">
+            <span className="text-xs text-text-muted">券商实时持仓</span>
+            <button onClick={() => brokerState.refreshPositions()} className="flex items-center gap-1.5 text-xs text-accent-primary/60 hover:text-accent-primary transition-colors">
+              <RefreshCw size={12} /> 刷新
+            </button>
+          </div>
+        </>
+      ) : brokerState.isConnected ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
+            <Briefcase size={28} className="text-text-muted" />
+          </div>
+          <p className="text-text-secondary font-medium mb-1">券商账户暂无持仓</p>
+          <p className="text-text-muted text-sm mb-4">开始在实盘交易吧</p>
+        </div>
+      ) : portfolio && portfolio.positions.length > 0 ? (
         <>
           <div className="overflow-x-auto">
             <table className="w-full">

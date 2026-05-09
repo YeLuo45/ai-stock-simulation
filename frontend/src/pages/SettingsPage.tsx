@@ -7,6 +7,7 @@ import { listModelConfigs, saveModelConfig, activateModel, testModel, getActiveM
 import { setCurrentModel } from "../services/api";
 import ModelPrioritySettings from "../components/ModelPrioritySettings";
 import DataSourceSelector from "../components/DataSourceSelector";
+import BrokerSettings from "../components/BrokerSettings";
 import type { AIModelConfig, APIProtocol } from "../types";
 
 const MODEL_OPTIONS = [
@@ -74,12 +75,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string; detail?: string } | null>(null);
-  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource">("config");
+  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker">("config");
 
   const TABS = [
     { key: "config" as const, label: "模型配置" },
     { key: "priority" as const, label: "AI模型优先级" },
     { key: "datasource" as const, label: "数据源管理" },
+    { key: "broker" as const, label: "券商账户" },
   ];
 
   useEffect(() => {
@@ -365,6 +367,16 @@ export default function SettingsPage() {
             启用/禁用各数据源。禁用后系统自动降级切换到其他可用源。
           </p>
           <DataSourceSelector />
+        </div>
+      )}
+
+      {settingsTab === "broker" && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <h3 className="font-bold text-slate-800 mb-1">券商账户配置</h3>
+          <p className="text-xs text-slate-500 mb-4">
+            配置实盘交易券商账户（Alpaca / 模拟），支持 Paper Trade 和 Live Trading。
+          </p>
+          <BrokerSettings />
         </div>
       )}
     </div>

@@ -3,6 +3,8 @@
  */
 import { create } from "zustand";
 import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool, AppliedStrategy, StrategyParams, StrategySignal, FollowTrade, QTable, RLTrainingProgress, RLTrainingResult } from "../types";
+import type { BrokerConfig, BrokerProvider, BrokerAccount, BrokerPosition, BrokerOrder } from "../services/brokerProvider";
+import { loadBrokerConfig, saveBrokerConfig, createBrokerProvider } from "../services/brokerProvider";
 
 export interface PriceAlert {
   id: string;
@@ -30,6 +32,24 @@ export interface SubscribedStrategy {
     stop_loss: number;
     take_profit: number;
   };
+}
+
+interface BrokerState {
+  provider: BrokerProvider | null;
+  config: BrokerConfig;
+  isConnected: boolean;
+  isPaper: boolean;
+  brokerAccount: BrokerAccount | null;
+  brokerPositions: BrokerPosition[];
+  brokerOrders: BrokerOrder[];
+  setConfig: (config: BrokerConfig) => void;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  refreshAccount: () => Promise<void>;
+  refreshPositions: () => Promise<void>;
+  refreshOrders: (status?: 'open' | 'closed') => Promise<void>;
+  placeOrder: (symbol: string, side: 'buy' | 'sell', qty: number, orderType: 'market' | 'limit', limitPrice?: number) => Promise<BrokerOrder>;
+  cancelOrder: (orderId: string) => Promise<void>;
 }
 
 interface AppState {
@@ -437,3 +457,109 @@ export const useStore = create<AppState>((set) => ({
     trainingHistory: [],
   }),
 }));
+
+// ============== Broker State ==============
+
+const initialBrokerConfig = loadBrokerConfig();
+
+const useBrokerStore = create<BrokerState>((set, get) => ({
+  provider: null,
+  config: initialBrokerConfig,
+  isConnected: false,
+  isPaper: initialBrokerConfig.paper ?? true,
+  brokerAccount: null,
+  brokerPositions: [],
+  brokerOrders: [],
+
+  setConfig: (config: BrokerConfig) => {
+    saveBrokerConfig(config);
+    set({ config, isPaper: config.paper ?? true });
+  },
+
+  connect: async () => {
+    const { config } = get();
+    const provider = createBrokerProvider(config);
+    try {
+      await provider.connect();
+      set({ provider, isConnected: true });
+      // Refresh data after connection
+      await get().refreshAccount();
+      await get().refreshPositions();
+    } catch (e) {
+      console.error('Broker connect failed:', e);
+      throw e;
+    }
+  },
+
+  disconnect: async () => {
+    const { provider } = get();
+    if (provider) {
+      await provider.disconnect();
+    }
+    set({
+      provider: null,
+      isConnected: false,
+      brokerAccount: null,
+      brokerPositions: [],
+      brokerOrders: [],
+    });
+  },
+
+  refreshAccount: async () => {
+    const { provider, isConnected } = get();
+    if (!provider || !isConnected) return;
+    try {
+      const account = await provider.getAccount();
+      set({ brokerAccount: account });
+    } catch (e) {
+      console.error('Failed to refresh account:', e);
+    }
+  },
+
+  refreshPositions: async () => {
+    const { provider, isConnected } = get();
+    if (!provider || !isConnected) return;
+    try {
+      const positions = await provider.getPositions();
+      set({ brokerPositions: positions });
+    } catch (e) {
+      console.error('Failed to refresh positions:', e);
+    }
+  },
+
+  refreshOrders: async (status?: 'open' | 'closed') => {
+    const { provider, isConnected } = get();
+    if (!provider || !isConnected) return;
+    try {
+      const orders = await provider.getOrders(status);
+      set({ brokerOrders: orders });
+    } catch (e) {
+      console.error('Failed to refresh orders:', e);
+    }
+  },
+
+  placeOrder: async (symbol, side, qty, orderType, limitPrice) => {
+    const { provider, isConnected } = get();
+    if (!provider || !isConnected) {
+      throw new Error('Broker not connected');
+    }
+    const order = await provider.placeOrder(symbol, side, qty, orderType, limitPrice);
+    // Refresh positions and orders after placing order
+    await get().refreshPositions();
+    await get().refreshOrders('open');
+    return order;
+  },
+
+  cancelOrder: async (orderId: string) => {
+    const { provider, isConnected } = get();
+    if (!provider || !isConnected) {
+      throw new Error('Broker not connected');
+    }
+    await provider.cancelOrder(orderId);
+    await get().refreshOrders('open');
+  },
+}));
+
+// Re-export broker store
+export { useBrokerStore };
+export type { BrokerState };
