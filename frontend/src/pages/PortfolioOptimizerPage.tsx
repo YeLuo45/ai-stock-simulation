@@ -1,7 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '../store';
 import { fetchKlineData } from '../services/yahooFinance';
-import { BarChart2, Loader2, PieChart, Target, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import {
+  meanVarianceOptimize,
+  riskParityOptimize,
+  computeEfficientFrontier,
+  generateRandomPortfolios,
+  computeCovarianceMatrix,
+  type OptimizationConstraints,
+  type OptimizationResult,
+  type EfficientFrontierPoint,
+} from '../services/optimizer';
+import EfficientFrontierChart from '../components/EfficientFrontierChart';
+import OptimizerResultPanel from '../components/OptimizerResultPanel';
+import { Loader2, PieChart, AlertTriangle, CheckCircle2, Settings2, Import, TrendingUp } from 'lucide-react';
 
 interface StockReturn {
   symbol: string;
@@ -10,16 +22,39 @@ interface StockReturn {
   expectedReturn: number;
   volatility: number;
   sharpe: number;
+  returns: number[];
 }
 
+type OptimizationTarget = 'max_sharpe' | 'min_variance' | 'risk_parity';
+
 export default function PortfolioOptimizerPage() {
-  const { selectedStocks, showNotification } = useStore();
+  const { selectedStocks, showNotification, portfolio } = useStore();
   const [loading, setLoading] = useState(false);
   const [stocks, setStocks] = useState<StockReturn[]>([]);
   const [targetReturn, setTargetReturn] = useState(10); // 目标年化收益 %
   const [riskFreeRate, setRiskFreeRate] = useState(3);  // 无风险利率 %
   
-  // 默认股票池（当自选股为空时）
+  // Optimization settings
+  const [optimizationTarget, setOptimizationTarget] = useState<OptimizationTarget>('max_sharpe');
+  const [maxWeight, setMaxWeight] = useState(30);  // max weight per asset %
+  const [minWeight, setMinWeight] = useState(0);   // min weight per asset %
+  const [allowShort, setAllowShort] = useState(false);
+  const [dataWindow, setDataWindow] = useState(252); // trading days
+  
+  // Optimization results
+  const [optimizationResult, setOptimizationResult] = useState<OptimizationResult | null>(null);
+  const [frontierPoints, setFrontierPoints] = useState<EfficientFrontierPoint[]>([]);
+  const [randomPortfolios, setRandomPortfolios] = useState<EfficientFrontierPoint[]>([]);
+  const [hasOptimized, setHasOptimized] = useState(false);
+  
+  // Constraints for optimizer
+  const constraints: OptimizationConstraints = useMemo(() => ({
+    maxWeight: maxWeight / 100,
+    minWeight: minWeight / 100,
+    allowShort,
+  }), [maxWeight, minWeight, allowShort]);
+  
+  // Default stock pool
   const defaultStocks = [
     { symbol: '600519', name: '贵州茅台' },
     { symbol: '000001', name: '平安银行' },
@@ -28,33 +63,35 @@ export default function PortfolioOptimizerPage() {
     { symbol: '000002', name: '万科A' },
   ];
 
-  // 加载股票数据
+  // Load stock data
   const loadStocks = useCallback(async () => {
-    const pool = selectedStocks.length > 0 
+    const pool = selectedStocks.length > 0
       ? selectedStocks.slice(0, 8).map(s => ({ symbol: s.symbol, name: s.name }))
       : defaultStocks;
     
     setLoading(true);
+    setHasOptimized(false);
+    setOptimizationResult(null);
     
     try {
       const results = await Promise.allSettled(
         pool.map(async (s) => {
-          const kline = await fetchKlineData(s.symbol, 252);
-          // 计算年化收益和波动率
+          const kline = await fetchKlineData(s.symbol, dataWindow);
+          // Calculate returns
           const returns = kline.map((k, i) => {
             if (i === 0) return 0;
             return (k.close - kline[i - 1].close) / kline[i - 1].close;
           }).slice(1);
           
           const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
-          const expectedReturn = avgReturn * 252 * 100; // 年化
+          const expectedReturn = avgReturn * 252 * 100; // Annualized
           
           const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
-          const volatility = Math.sqrt(variance * 252) * 100; // 年化波动率
+          const volatility = Math.sqrt(variance * 252) * 100; // Annualized volatility
           
-          const sharpe = (expectedReturn - riskFreeRate) / volatility;
+          const sharpe = volatility > 0 ? (expectedReturn - riskFreeRate) / volatility : 0;
           
-          return { symbol: s.symbol, name: s.name, weight: 0, expectedReturn, volatility, sharpe };
+          return { symbol: s.symbol, name: s.name, weight: 0, expectedReturn, volatility, sharpe, returns };
         })
       );
       
@@ -68,60 +105,196 @@ export default function PortfolioOptimizerPage() {
       showNotification('error', '加载股票数据失败');
       setLoading(false);
     }
-  }, [selectedStocks, riskFreeRate, showNotification]);
+  }, [selectedStocks, riskFreeRate, dataWindow, showNotification]);
 
   useEffect(() => {
     loadStocks();
   }, [loadStocks]);
 
-  // 简单的等权重优化
+  // Import current positions
+  const handleImportPositions = useCallback(() => {
+    if (!portfolio?.positions || portfolio.positions.length === 0) {
+      showNotification('info', '当前无持仓数据');
+      return;
+    }
+    
+    // Use position symbols as stock pool
+    const posStocks = portfolio.positions.map(p => ({
+      symbol: p.symbol,
+      name: p.name,
+      weight: (p.market_value / portfolio.total_market_value) * 100, // Current weight
+    }));
+    
+    // Reload with position symbols
+    setLoading(true);
+    Promise.allSettled(
+      posStocks.map(async (s) => {
+        const kline = await fetchKlineData(s.symbol, dataWindow);
+        const returns = kline.map((k, i) => {
+          if (i === 0) return 0;
+          return (k.close - kline[i - 1].close) / kline[i - 1].close;
+        }).slice(1);
+        
+        const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+        const expectedReturn = avgReturn * 252 * 100;
+        
+        const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
+        const volatility = Math.sqrt(variance * 252) * 100;
+        
+        const sharpe = volatility > 0 ? (expectedReturn - riskFreeRate) / volatility : 0;
+        
+        return { 
+          symbol: s.symbol, 
+          name: s.name, 
+          weight: s.weight, // Keep current weight
+          expectedReturn, 
+          volatility, 
+          sharpe, 
+          returns 
+        };
+      })
+    ).then(results => {
+      const valid = results
+        .filter((r): r is PromiseFulfilledResult<StockReturn> => r.status === 'fulfilled')
+        .map(r => r.value);
+      
+      if (valid.length > 0) {
+        setStocks(valid);
+        showNotification('success', `已导入 ${valid.length} 个持仓`);
+      } else {
+        showNotification('error', '导入持仓数据失败');
+      }
+      setLoading(false);
+    });
+  }, [portfolio, riskFreeRate, dataWindow, showNotification]);
+
+  // Run optimization
+  const handleOptimize = useCallback(() => {
+    if (stocks.length < 2) {
+      showNotification('info', '需要至少2只股票进行优化');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      // Build returns matrix and covariance matrix
+      const returnsMatrix = stocks.map(s => s.returns);
+      const covMatrix = computeCovarianceMatrix(returnsMatrix);
+      
+      // Compute efficient frontier
+      const frontier = computeEfficientFrontier(
+        stocks.map(s => s.symbol),
+        returnsMatrix,
+        covMatrix,
+        30,
+        riskFreeRate / 100
+      );
+      setFrontierPoints(frontier);
+      
+      // Generate random portfolios for visualization
+      const random = generateRandomPortfolios(
+        stocks.map(s => s.symbol),
+        returnsMatrix,
+        covMatrix,
+        150,
+        constraints
+      );
+      setRandomPortfolios(random);
+      
+      // Run the selected optimization
+      let result: OptimizationResult;
+      
+      switch (optimizationTarget) {
+        case 'max_sharpe':
+          result = meanVarianceOptimize(
+            stocks.map(s => s.symbol),
+            returnsMatrix,
+            covMatrix,
+            riskFreeRate / 100,
+            constraints,
+            'max_sharpe'
+          );
+          break;
+          
+        case 'min_variance':
+          result = meanVarianceOptimize(
+            stocks.map(s => s.symbol),
+            returnsMatrix,
+            covMatrix,
+            riskFreeRate / 100,
+            constraints,
+            'min_variance',
+            targetReturn / 100
+          );
+          break;
+          
+        case 'risk_parity':
+          result = riskParityOptimize(
+            stocks.map(s => s.symbol),
+            covMatrix,
+            constraints
+          );
+          break;
+          
+        default:
+          result = meanVarianceOptimize(
+            stocks.map(s => s.symbol),
+            returnsMatrix,
+            covMatrix,
+            riskFreeRate / 100,
+            constraints,
+            'max_sharpe'
+          );
+      }
+      
+      setOptimizationResult(result);
+      setHasOptimized(true);
+      
+      // Update stock weights
+      setStocks(s => s.map((stock, i) => ({
+        ...stock,
+        weight: result.weights[i] * 100,
+      })));
+      
+      const targetNames: Record<OptimizationTarget, string> = {
+        max_sharpe: '最大夏普',
+        min_variance: '最小方差',
+        risk_parity: '风险平价',
+      };
+      showNotification('success', `已优化为${targetNames[optimizationTarget]}组合`);
+    } catch (error) {
+      console.error('Optimization error:', error);
+      showNotification('error', '优化计算失败');
+    }
+    
+    setLoading(false);
+  }, [stocks, optimizationTarget, targetReturn, riskFreeRate, constraints, showNotification]);
+
+  // Simple equal weight allocation
   const handleEqualWeight = () => {
     if (stocks.length === 0) return;
     const w = 100 / stocks.length;
     setStocks(s => s.map(stock => ({ ...stock, weight: w })));
+    setOptimizationResult(null);
+    setHasOptimized(false);
     showNotification('success', '已设为等权重分配');
   };
 
-  // 基于风险平价优化（简化版）
-  const handleRiskParity = () => {
+  // Simple risk parity (inverse volatility)
+  const handleSimpleRiskParity = () => {
     if (stocks.length === 0) return;
     const totalInverseVol = stocks.reduce((sum, s) => sum + 1 / s.volatility, 0);
     setStocks(s => s.map(stock => ({
       ...stock,
       weight: (1 / stock.volatility / totalInverseVol) * 100,
     })));
-    showNotification('success', '已设为风险平价组合');
+    setOptimizationResult(null);
+    setHasOptimized(false);
+    showNotification('success', '已设为简单风险平价组合');
   };
 
-  // 基于最大夏普优化（简化版）
-  const handleMaxSharpe = () => {
-    if (stocks.length === 0) return;
-    const maxSharpeStock = stocks.reduce((best, s) => s.sharpe > best.sharpe ? s : best);
-    setStocks(s => s.map(stock => ({
-      ...stock,
-      weight: stock.symbol === maxSharpeStock.symbol ? 100 : 0,
-    })));
-    showNotification('success', '已设为最大夏普比率组合');
-  };
-
-  // 基于目标收益优化（简化版）
-  const handleTargetReturn = () => {
-    if (stocks.length === 0) return;
-    // 找到目标收益附近的股票，给正收益股票分配权重
-    const positive = stocks.filter(s => s.expectedReturn >= targetReturn);
-    if (positive.length === 0) {
-      showNotification('info', '无可满足目标收益的股票');
-      return;
-    }
-    const w = 100 / positive.length;
-    setStocks(s => s.map(stock => ({
-      ...stock,
-      weight: positive.some(p => p.symbol === stock.symbol) ? w : 0,
-    })));
-    showNotification('success', `已设为目标收益 ${targetReturn}% 组合`);
-  };
-
-  // 计算组合指标
+  // Calculate portfolio metrics
   const portfolioReturn = stocks.reduce((sum, s) => sum + (s.weight / 100) * s.expectedReturn, 0);
   const portfolioVol = Math.sqrt(
     stocks.reduce((sum, s) => sum + Math.pow(s.weight / 100 * s.volatility, 2), 0)
@@ -130,12 +303,12 @@ export default function PortfolioOptimizerPage() {
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
+      {/* Page Header */}
       <div className="flex items-center gap-3">
         <PieChart size={24} className="text-accent-primary" />
         <div>
           <h1 className="text-2xl font-bold">组合优化器</h1>
-          <p className="text-sm text-text-muted">基于 Mean-Variance 的资产配置建议</p>
+          <p className="text-sm text-text-muted">基于 Mean-Variance / Risk Parity 的资产配置</p>
         </div>
       </div>
 
@@ -146,78 +319,181 @@ export default function PortfolioOptimizerPage() {
         </div>
       ) : (
         <>
-          {/* 参数设置 */}
+          {/* Optimization Configuration */}
           <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
             <div className="flex items-center gap-2 mb-3">
-              <Target size={16} className="text-accent-warning" />
-              <h3 className="text-sm font-semibold">优化参数</h3>
+              <Settings2 size={16} className="text-accent-primary" />
+              <h3 className="text-sm font-semibold">优化配置</h3>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Optimization Target */}
               <div>
-                <label className="text-xs text-text-muted block mb-1">目标年化收益 (%)</label>
+                <label className="text-xs text-text-muted block mb-1">优化目标</label>
+                <select
+                  value={optimizationTarget}
+                  onChange={(e) => setOptimizationTarget(e.target.value as OptimizationTarget)}
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border-color rounded-lg text-sm"
+                >
+                  <option value="max_sharpe">Max Sharpe (最大夏普)</option>
+                  <option value="min_variance">Min Variance (最小方差)</option>
+                  <option value="risk_parity">Risk Parity (风险平价)</option>
+                </select>
+              </div>
+              
+              {/* Max Weight */}
+              <div>
+                <label className="text-xs text-text-muted block mb-1">单票最大权重 (%)</label>
                 <input
                   type="number"
-                  value={targetReturn}
-                  onChange={(e) => setTargetReturn(parseFloat(e.target.value) || 0)}
+                  min="5"
+                  max="100"
+                  value={maxWeight}
+                  onChange={(e) => setMaxWeight(Math.max(5, Math.min(100, parseInt(e.target.value) || 30)))}
                   className="w-full px-3 py-2 bg-bg-tertiary border border-border-color rounded-lg text-sm"
                 />
               </div>
+              
+              {/* Min Weight */}
+              <div>
+                <label className="text-xs text-text-muted block mb-1">单票最小权重 (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={minWeight}
+                  onChange={(e) => setMinWeight(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border-color rounded-lg text-sm"
+                />
+              </div>
+              
+              {/* Risk Free Rate */}
               <div>
                 <label className="text-xs text-text-muted block mb-1">无风险利率 (%)</label>
                 <input
                   type="number"
+                  min="0"
+                  max="10"
+                  step="0.1"
                   value={riskFreeRate}
                   onChange={(e) => setRiskFreeRate(parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 bg-bg-tertiary border border-border-color rounded-lg text-sm"
                 />
               </div>
             </div>
-          </div>
-
-          {/* 优化策略按钮 */}
-          <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
-            <div className="flex items-center gap-2 mb-3">
-              <BarChart2 size={16} className="text-accent-primary" />
-              <h3 className="text-sm font-semibold">优化策略</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+              {/* Allow Short */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="allowShort"
+                  checked={allowShort}
+                  onChange={(e) => setAllowShort(e.target.checked)}
+                  className="w-4 h-4 rounded border-border-color"
+                />
+                <label htmlFor="allowShort" className="text-xs text-text-muted">允许做空</label>
+              </div>
+              
+              {/* Data Window */}
+              <div>
+                <label className="text-xs text-text-muted block mb-1">数据窗口 (日)</label>
+                <select
+                  value={dataWindow}
+                  onChange={(e) => setDataWindow(parseInt(e.target.value) || 252)}
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border-color rounded-lg text-sm"
+                >
+                  <option value={60}>最近 60 天</option>
+                  <option value={120}>最近 120 天</option>
+                  <option value={252}>最近 252 天</option>
+                </select>
+              </div>
+              
+              {/* Target Return (for min_variance) */}
+              {optimizationTarget === 'min_variance' && (
+                <div>
+                  <label className="text-xs text-text-muted block mb-1">目标年化收益 (%)</label>
+                  <input
+                    type="number"
+                    value={targetReturn}
+                    onChange={(e) => setTargetReturn(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-bg-tertiary border border-border-color rounded-lg text-sm"
+                  />
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <button
+                onClick={handleOptimize}
+                disabled={stocks.length < 2}
+                className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <TrendingUp size={14} />
+                执行优化
+              </button>
+              
               <button
                 onClick={handleEqualWeight}
                 className="px-3 py-2 bg-bg-tertiary hover:bg-accent-primary/20 border border-border-color rounded-lg text-xs transition-colors"
               >
                 等权重
               </button>
+              
               <button
-                onClick={handleRiskParity}
+                onClick={handleSimpleRiskParity}
                 className="px-3 py-2 bg-bg-tertiary hover:bg-accent-primary/20 border border-border-color rounded-lg text-xs transition-colors"
               >
-                风险平价
+                简单风险平价
               </button>
+              
               <button
-                onClick={handleMaxSharpe}
-                className="px-3 py-2 bg-bg-tertiary hover:bg-accent-primary/20 border border-border-color rounded-lg text-xs transition-colors"
+                onClick={handleImportPositions}
+                className="px-3 py-2 bg-bg-tertiary hover:bg-accent-primary/20 border border-border-color rounded-lg text-xs transition-colors flex items-center gap-1"
               >
-                最大夏普
+                <Import size={12} />
+                导入当前持仓
               </button>
+              
               <button
-                onClick={handleTargetReturn}
+                onClick={loadStocks}
                 className="px-3 py-2 bg-bg-tertiary hover:bg-accent-primary/20 border border-border-color rounded-lg text-xs transition-colors"
               >
-                目标收益
+                刷新数据
               </button>
             </div>
           </div>
 
-          {/* 个股数据表格 */}
+          {/* Efficient Frontier Chart */}
+          {hasOptimized && (frontierPoints.length > 0 || randomPortfolios.length > 0) && (
+            <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
+              <h3 className="text-sm font-semibold mb-3">有效前沿</h3>
+              <EfficientFrontierChart
+                frontierPoints={frontierPoints}
+                randomPortfolios={randomPortfolios}
+                width={800}
+                height={400}
+              />
+            </div>
+          )}
+
+          {/* Optimization Results Panel */}
+          {hasOptimized && optimizationResult && (
+            <OptimizerResultPanel
+              result={optimizationResult}
+              stocks={stocks}
+              riskContributions={optimizationResult.riskContributions}
+            />
+          )}
+
+          {/* Stock Pool Table */}
           <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold">股票池 ({stocks.length})</h3>
-              <button
-                onClick={loadStocks}
-                className="text-xs text-accent-primary hover:underline"
-              >
-                刷新数据
-              </button>
+              <span className="text-xs text-text-muted">
+                权重合计: {stocks.reduce((sum, s) => sum + s.weight, 0).toFixed(1)}%
+              </span>
             </div>
             
             <div className="overflow-x-auto">
@@ -228,7 +504,7 @@ export default function PortfolioOptimizerPage() {
                     <th className="text-right py-2 text-text-muted">年化收益</th>
                     <th className="text-right py-2 text-text-muted">波动率</th>
                     <th className="text-right py-2 text-text-muted">夏普比率</th>
-                    <th className="text-right py-2 text-text-muted">建议权重</th>
+                    <th className="text-right py-2 text-text-muted">优化权重</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,10 +528,13 @@ export default function PortfolioOptimizerPage() {
                           type="number"
                           min="0"
                           max="100"
+                          step="0.1"
                           value={stock.weight.toFixed(1)}
                           onChange={(e) => {
                             const w = parseFloat(e.target.value) || 0;
                             setStocks(s => s.map(st => st.symbol === stock.symbol ? { ...st, weight: w } : st));
+                            setHasOptimized(false);
+                            setOptimizationResult(null);
                           }}
                           className="w-16 px-2 py-1 bg-bg-tertiary border border-border-color rounded text-right"
                         />
@@ -268,7 +547,7 @@ export default function PortfolioOptimizerPage() {
             </div>
           </div>
 
-          {/* 组合汇总 */}
+          {/* Portfolio Summary */}
           <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
             <div className="flex items-center gap-2 mb-3">
               <CheckCircle2 size={16} className="text-accent-success" />
