@@ -866,3 +866,41 @@ export interface WalkForwardResult {
   inSamplevsOOSRatio: number;    // IS vs OOS return ratio, overfitting detection
 }
 
+// ============== Drawdown Optimization ==============
+
+export interface DrawdownOptimizationResult {
+  beforeParams: {
+    maShort: number;
+    maLong: number;
+    stopLoss: number;
+    takeProfit: number;
+  };
+  afterParams: {
+    maShort: number;
+    maLong: number;
+    stopLoss: number;
+    takeProfit: number;
+  };
+  beforeMetrics: {
+    totalReturn: number;
+    annualReturn: number;
+    maxDrawdown: number;
+    rollingMaxDrawdown: number;
+    sharpeRatio: number;
+    winRate: number;
+  };
+  afterMetrics: {
+    totalReturn: number;
+    annualReturn: number;
+    maxDrawdown: number;
+    rollingMaxDrawdown: number;
+    sharpeRatio: number;
+    winRate: number;
+  };
+  beforeReturns: number[];
+  afterReturns: number[];
+  beforeDrawdown: number[];
+  afterDrawdown: number[];
+  beforeRollingMaxDD: number;
+  afterRollingMaxDD: number;
+}

@@ -13,7 +13,9 @@ import {
 } from '../services/optimizer';
 import EfficientFrontierChart from '../components/EfficientFrontierChart';
 import OptimizerResultPanel from '../components/OptimizerResultPanel';
-import { Loader2, PieChart, AlertTriangle, CheckCircle2, Settings2, Import, TrendingUp } from 'lucide-react';
+import DrawdownOptimizerPanel from '../components/DrawdownOptimizerPanel';
+import { Loader2, PieChart, AlertTriangle, CheckCircle2, Settings2, Import, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
+import clsx from 'clsx';
 
 interface StockReturn {
   symbol: string;
@@ -26,10 +28,12 @@ interface StockReturn {
 }
 
 type OptimizationTarget = 'max_sharpe' | 'min_variance' | 'risk_parity';
+type OptimizerTab = 'weights' | 'frontier' | 'drawdown';
 
 export default function PortfolioOptimizerPage() {
   const { selectedStocks, showNotification, portfolio } = useStore();
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<OptimizerTab>('weights');
   const [stocks, setStocks] = useState<StockReturn[]>([]);
   const [targetReturn, setTargetReturn] = useState(10); // 目标年化收益 %
   const [riskFreeRate, setRiskFreeRate] = useState(3);  // 无风险利率 %
@@ -312,7 +316,50 @@ export default function PortfolioOptimizerPage() {
         </div>
       </div>
 
-      {loading ? (
+      {/* Tab Navigation */}
+      <div className="flex gap-1 bg-bg-secondary rounded-xl p-1 border border-border-color">
+        <button
+          onClick={() => setActiveTab('weights')}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            activeTab === 'weights'
+              ? "bg-accent-primary/10 text-accent-primary"
+              : "text-text-muted hover:text-text-secondary hover:bg-bg-tertiary"
+          )}
+        >
+          <PieChart size={14} />
+          权重优化
+        </button>
+        <button
+          onClick={() => setActiveTab('frontier')}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            activeTab === 'frontier'
+              ? "bg-accent-primary/10 text-accent-primary"
+              : "text-text-muted hover:text-text-secondary hover:bg-bg-tertiary"
+          )}
+        >
+          <BarChart3 size={14} />
+          有效前沿
+        </button>
+        <button
+          onClick={() => setActiveTab('drawdown')}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            activeTab === 'drawdown'
+              ? "bg-accent-primary/10 text-accent-primary"
+              : "text-text-muted hover:text-text-secondary hover:bg-bg-tertiary"
+          )}
+        >
+          <TrendingDown size={14} />
+          回撤优化
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'drawdown' ? (
+        <DrawdownOptimizerPanel />
+      ) : loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 size={32} className="animate-spin text-accent-primary" />
           <span className="ml-3 text-text-muted">正在加载股票数据...</span>
