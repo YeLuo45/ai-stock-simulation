@@ -10,10 +10,12 @@ import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } f
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
 import type { MemoryEntry } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3 } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield } from "lucide-react";
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
+import DrawdownDashboard from "../components/DrawdownDashboard";
+import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
 
 const PAGE_SIZE = 10;
 
@@ -32,6 +34,8 @@ export default function TradingPage() {
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [editingAccountName, setEditingAccountName] = useState("");
   const [newAccountName, setNewAccountName] = useState("");
+  const [showDrawdownDashboard, setShowDrawdownDashboard] = useState(false);
+  const [currentDrawdown, setCurrentDrawdown] = useState(0);
 
   // Similar memories for positions
   const [expandedPositionId, setExpandedPositionId] = useState<number | null>(null);
@@ -47,11 +51,21 @@ export default function TradingPage() {
     if (brokerState.isConnected) {
       await brokerState.refreshAccount();
       await brokerState.refreshPositions();
+      // Track equity for drawdown
+      if (brokerState.brokerAccount) {
+        trackEquitySnapshot(brokerState.brokerAccount.equity);
+      }
+      const dd = computeDrawdown();
+      setCurrentDrawdown(dd.currentDrawdown);
       return;
     }
     try {
       const data = await getPortfolio(currentAccountId);
       setPortfolio(data);
+      // Track equity for drawdown
+      trackEquitySnapshot(data.total_assets);
+      const dd = computeDrawdown();
+      setCurrentDrawdown(dd.currentDrawdown);
       // Load similar memories for each position
       if (data.positions) {
         const similar: Record<number, MemoryEntry[]> = {};
@@ -109,6 +123,9 @@ export default function TradingPage() {
         await brokerState.placeOrder(symbol, tradeType, parseInt(quantity), 'market');
         await brokerState.refreshPositions();
         await brokerState.refreshAccount();
+        if (brokerState.brokerAccount) {
+          trackEquitySnapshot(brokerState.brokerAccount.equity);
+        }
         showNotification("success", `${tradeType === "buy" ? "买入" : "卖出"}成功（券商）`);
       } else {
         // Use simulated trading
@@ -122,6 +139,10 @@ export default function TradingPage() {
         await loadTrades();
         showNotification("success", `${tradeType === "buy" ? "买入" : "卖出"}成功`);
       }
+      // Check drawdown alerts after trade
+      const dd = computeDrawdown();
+      setCurrentDrawdown(dd.currentDrawdown);
+      checkAndTriggerAlerts(dd.currentDrawdown);
       setSymbol(""); setName(""); setQuantity("");
     } catch (e: unknown) {
       const msg = (e as { message?: string })?.message || "交易失败";
@@ -929,6 +950,51 @@ export default function TradingPage() {
     <div className="space-y-6">
       {/* Account Cards */}
       {renderAccountCard()}
+
+      {/* Drawdown Alert Bar */}
+      <div className="flex items-center justify-between bg-bg-secondary border border-border-color rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className={clsx(
+            "flex items-center gap-2 px-3 py-1.5 rounded-lg",
+            currentDrawdown <= -0.2
+              ? "bg-red-500/10 border border-red-500/30"
+              : currentDrawdown <= -0.1
+              ? "bg-yellow-500/10 border border-yellow-500/30"
+              : "bg-blue-500/10 border border-blue-500/30"
+          )}>
+            <TrendingDown size={14} className={
+              currentDrawdown <= -0.2
+                ? "text-red-400"
+                : currentDrawdown <= -0.1
+                ? "text-yellow-400"
+                : "text-blue-400"
+            } />
+            <span className="text-xs text-text-muted">当前回撤</span>
+            <span className={clsx(
+              "font-mono font-bold text-sm",
+              currentDrawdown <= -0.2
+                ? "text-red-400"
+                : currentDrawdown <= -0.1
+                ? "text-yellow-400"
+                : "text-blue-400"
+            )}>
+              {currentDrawdown === 0 ? "--" : `${(currentDrawdown * 100).toFixed(2)}%`}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowDrawdownDashboard(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary/10 border border-accent-primary/30 text-accent-primary hover:bg-accent-primary/20 transition-colors text-sm font-medium"
+        >
+          <Shield size={14} />
+          风控面板
+        </button>
+      </div>
+
+      {/* Drawdown Dashboard Modal */}
+      {showDrawdownDashboard && (
+        <DrawdownDashboard onClose={() => setShowDrawdownDashboard(false)} />
+      )}
 
       {/* Account Manager Modal */}
       {renderAccountManager()}

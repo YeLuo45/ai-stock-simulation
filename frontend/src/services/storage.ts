@@ -65,7 +65,7 @@ function createDefaultPortfolio(accountId?: number): Portfolio {
 
 // ============== Generic helpers ==============
 
-function load<T>(key: string, defaultValue: T): T {
+export function load<T>(key: string, defaultValue: T): T {
   try {
     const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) : defaultValue;
@@ -74,7 +74,7 @@ function load<T>(key: string, defaultValue: T): T {
   }
 }
 
-function save<T>(key: string, value: T): void {
+export function save<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
@@ -325,4 +325,45 @@ export function loadFactorPortfolios(): FactorPortfolio[] {
 
 export function saveFactorPortfolios(portfolios: FactorPortfolio[]): void {
   localStorage.setItem(KEY_FACTOR_PORTFOLIOS, JSON.stringify(portfolios));
+}
+
+// ============== Drawdown Engine Storage ==============
+
+const KEY_EQUITY_SNAPSHOTS = "equity_curve_snapshots";
+const KEY_ALERT_RULES = "alert_rules";
+
+export interface EquitySnapshot {
+  timestamp: string;
+  value: number;
+  drawdown: number;
+  maxDrawdown: number;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  threshold: number;
+  severity: "info" | "warning" | "critical";
+  enabled: boolean;
+  actions: ("browser" | "notification" | "email")[];
+  triggered: boolean;
+  triggeredAt?: string;
+  recoveredAt?: string;
+}
+
+export function getEquitySnapshots(): EquitySnapshot[] {
+  return load<EquitySnapshot[]>(KEY_EQUITY_SNAPSHOTS, []);
+}
+
+export function saveEquitySnapshots(snapshots: EquitySnapshot[]): void {
+  const trimmed = snapshots.slice(-1000);
+  save(KEY_EQUITY_SNAPSHOTS, trimmed);
+}
+
+export function getAlertRules(): AlertRule[] {
+  return load<AlertRule[]>(KEY_ALERT_RULES, []);
+}
+
+export function saveAlertRules(rules: AlertRule[]): void {
+  save(KEY_ALERT_RULES, rules);
 }
