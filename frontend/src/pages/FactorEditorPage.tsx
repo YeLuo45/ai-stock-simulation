@@ -38,10 +38,12 @@ import {
   Star,
   Sparkles,
   Grid3X3,
+  Copy,
 } from 'lucide-react'
 import clsx from 'clsx'
 import FactorMiningPanel from '../components/FactorMiningPanel'
 import FactorCorrelationHeatmap from '../components/FactorCorrelationHeatmap'
+import FactorComposerPanel from '../components/FactorComposerPanel'
 
 const CATEGORY_LABELS: Record<FactorCategory, string> = {
   price: '价格类',
@@ -877,75 +879,117 @@ export default function FactorEditorPage() {
       {/* ===== Portfolios Tab ===== */}
       {activeTab === 'portfolios' && (
         <div className="space-y-6">
-          {/* Saved portfolios */}
-          {savedPortfolios.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {savedPortfolios.map(portfolio => (
-                <div key={portfolio.id} className="bg-bg-secondary rounded-xl border border-border-color p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-semibold">{portfolio.name}</h4>
-                      {portfolio.description && (
-                        <p className="text-xs text-text-muted mt-1">{portfolio.description}</p>
-                      )}
-                      <p className="text-[10px] text-text-muted mt-1">
-                        {new Date(portfolio.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => removePortfolio(portfolio.id)}
-                      className="p-1 text-text-muted hover:text-accent-danger transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                  {/* Factor list */}
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {portfolio.factors.map(fw => {
-                      const def = getAllFactorDefinitions().find(f => f.id === fw.factor_id)
-                      return (
-                        <span
-                          key={fw.factor_id}
-                          className={clsx(
-                            'inline-block px-2 py-0.5 rounded text-[10px] font-medium',
-                            fw.direction === 'long' ? 'bg-accent-success/10 text-accent-success' :
-                            fw.direction === 'short' ? 'bg-accent-danger/10 text-accent-danger' :
-                            'bg-accent-primary/10 text-accent-primary'
-                          )}
-                        >
-                          {def?.name_cn || fw.factor_id}: {(fw.weight * 100).toFixed(0)}%
-                        </span>
-                      )
-                    })}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                    <div className="p-2 bg-bg-tertiary/50 rounded text-center">
-                      <div className="font-bold text-accent-primary">{portfolio.factors.length}</div>
-                      <div className="text-text-muted">因子数量</div>
-                    </div>
-                    <div className="p-2 bg-bg-tertiary/50 rounded text-center">
-                      <div className="font-bold text-accent-secondary">
-                        {portfolio.factors.reduce((s, f) => s + f.weight, 0).toFixed(1)}
-                      </div>
-                      <div className="text-text-muted">总权重</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => loadPortfolio(portfolio)}
-                    className="w-full py-2 bg-accent-primary/10 text-accent-primary text-sm font-medium rounded-lg hover:bg-accent-primary/20 transition-colors"
-                  >
-                    加载此组合
-                  </button>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Left: Portfolio List */}
+            <div className="lg:col-span-1 bg-bg-secondary rounded-xl border border-border-color p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">我的组合</h3>
+                <button
+                  onClick={() => {
+                    setFactorWeights([]);
+                    setPortfolioName('');
+                    setPortfolioDesc('');
+                  }}
+                  className="p-1.5 text-accent-primary hover:bg-accent-primary/10 rounded-lg transition-colors"
+                  title="新建组合"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+              {savedPortfolios.length === 0 ? (
+                <div className="text-center py-8">
+                  <Star size={32} className="mx-auto text-text-muted/30 mb-2" />
+                  <p className="text-text-muted text-xs">暂无保存的组合</p>
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                  {savedPortfolios.map(p => (
+                    <div
+                      key={p.id}
+                      onClick={() => loadPortfolio(p)}
+                      className={clsx(
+                        'p-3 rounded-lg border cursor-pointer transition-colors',
+                        portfolioName === p.name
+                          ? 'border-accent-primary bg-accent-primary/5'
+                          : 'border-border-color hover:border-accent-primary/50'
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{p.name}</div>
+                          <div className="text-[10px] text-text-muted mt-0.5">
+                            {p.factors.length}因子 · {new Date(p.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 ml-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const copy: FactorPortfolio = {
+                                ...p,
+                                id: Date.now().toString(),
+                                name: `${p.name} (副本)`,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                              };
+                              saveFactorPortfolio(copy);
+                              setSavedPortfolios(getFactorPortfolios());
+                              showNotification('info', '组合已复制');
+                            }}
+                            className="p-1 text-text-muted hover:text-accent-primary transition-colors"
+                            title="复制"
+                          >
+                            <Copy size={12} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removePortfolio(p.id);
+                            }}
+                            className="p-1 text-text-muted hover:text-accent-danger transition-colors"
+                            title="删除"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {p.factors.slice(0, 3).map(fw => {
+                          const def = getAllFactorDefinitions().find(f => f.id === fw.factor_id);
+                          return (
+                            <span
+                              key={fw.factor_id}
+                              className={clsx(
+                                'inline-block px-1.5 py-0.5 rounded text-[9px] font-medium',
+                                fw.direction === 'long' ? 'bg-accent-success/10 text-accent-success' :
+                                fw.direction === 'short' ? 'bg-accent-danger/10 text-accent-danger' :
+                                'bg-accent-primary/10 text-accent-primary'
+                              )}
+                            >
+                              {def?.name_cn || fw.factor_id}
+                            </span>
+                          );
+                        })}
+                        {p.factors.length > 3 && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[9px] text-text-muted">
+                            +{p.factors.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="bg-bg-secondary rounded-xl border border-border-color p-12 text-center">
-              <Star size={48} className="mx-auto text-text-muted/30 mb-4" />
-              <p className="text-text-muted">暂无保存的因子组合</p>
-              <p className="text-text-muted/60 text-sm mt-1">在因子编辑器中配置并保存</p>
+
+            {/* Right: Composer Panel */}
+            <div className="lg:col-span-3">
+              <FactorComposerPanel
+                portfolio={savedPortfolios.find(p => p.name === portfolioName)}
+                defaultSymbols={symbols}
+              />
             </div>
-          )}
+          </div>
         </div>
       )}
 

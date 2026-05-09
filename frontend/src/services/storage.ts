@@ -2,7 +2,7 @@
  * localStorage persistence layer for pure frontend mode
  * Replaces backend SQLite storage
  */
-import type { Portfolio, Trade, BacktestResponse, AIModelConfig, DataSourceResponse, AIModelPriorityResponse, StockInfo, MemoryEntry, MemoryType } from "../types";
+import type { Portfolio, Trade, BacktestResponse, AIModelConfig, DataSourceResponse, AIModelPriorityResponse, StockInfo, MemoryEntry, MemoryType, FactorPortfolio } from "../types";
 
 // Storage keys
 const KEYS = {
@@ -309,4 +309,20 @@ export function getMemoryStats() {
     recentCount: entries.filter(e => e.created_at >= sevenDaysAgo).length,
     favoriteCount: entries.filter(e => e.is_favorite).length,
   };
+}
+
+// ============== Factor Portfolios ==============
+
+const KEY_FACTOR_PORTFOLIOS = "factor_portfolios";
+
+export function loadFactorPortfolios(): FactorPortfolio[] {
+  try {
+    return JSON.parse(localStorage.getItem(KEY_FACTOR_PORTFOLIOS) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function saveFactorPortfolios(portfolios: FactorPortfolio[]): void {
+  localStorage.setItem(KEY_FACTOR_PORTFOLIOS, JSON.stringify(portfolios));
 }
