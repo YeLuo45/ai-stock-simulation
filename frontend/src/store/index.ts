@@ -2,7 +2,7 @@
  * Global state store using Zustand
  */
 import { create } from "zustand";
-import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool, AppliedStrategy, StrategyParams, StrategySignal, FollowTrade } from "../types";
+import type { Page, Portfolio, Trade, StockInfo, BacktestResponse, AIModelConfig, IPOEvaluationResult, StockPool, AppliedStrategy, StrategyParams, StrategySignal, FollowTrade, QTable, RLTrainingProgress, RLTrainingResult } from "../types";
 
 export interface PriceAlert {
   id: string;
@@ -123,6 +123,20 @@ interface AppState {
   followTrades: FollowTrade[];
   addFollowTrade: (trade: FollowTrade) => void;
   updateFollowTrade: (id: string, update: Partial<FollowTrade>) => void;
+
+  // RL Training State
+  qTable: QTable;
+  policyWeights: number[];
+  trainingProgress: RLTrainingProgress;
+  trainingHistory: RLTrainingResult[];
+  selectedSymbol: string;
+  setQTable: (qTable: QTable) => void;
+  setPolicyWeights: (weights: number[]) => void;
+  setTrainingProgress: (progress: Partial<RLTrainingProgress>) => void;
+  addTrainingResult: (result: RLTrainingResult) => void;
+  clearTrainingHistory: () => void;
+  setSelectedSymbol: (symbol: string) => void;
+  resetRLState: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -384,5 +398,42 @@ export const useStore = create<AppState>((set) => ({
     const newList = state.followTrades.map(t => t.id === id ? { ...t, ...update } : t);
     try { localStorage.setItem('follow-trades', JSON.stringify(newList)); } catch {}
     return { followTrades: newList };
+  }),
+
+  // RL Training State
+  qTable: {},
+  policyWeights: [],
+  trainingProgress: {
+    currentEpisode: 0,
+    totalEpisodes: 500,
+    currentReward: 0,
+    epsilon: 0.1,
+    isRunning: false,
+    isPaused: false,
+  },
+  trainingHistory: [],
+  selectedSymbol: 'AAPL',
+  setQTable: (qTable) => set({ qTable }),
+  setPolicyWeights: (policyWeights) => set({ policyWeights }),
+  setTrainingProgress: (progress) => set((state) => ({
+    trainingProgress: { ...state.trainingProgress, ...progress },
+  })),
+  addTrainingResult: (result) => set((state) => ({
+    trainingHistory: [...state.trainingHistory, result],
+  })),
+  clearTrainingHistory: () => set({ trainingHistory: [] }),
+  setSelectedSymbol: (selectedSymbol) => set({ selectedSymbol }),
+  resetRLState: () => set({
+    qTable: {},
+    policyWeights: [],
+    trainingProgress: {
+      currentEpisode: 0,
+      totalEpisodes: 500,
+      currentReward: 0,
+      epsilon: 0.1,
+      isRunning: false,
+      isPaused: false,
+    },
+    trainingHistory: [],
   }),
 }));

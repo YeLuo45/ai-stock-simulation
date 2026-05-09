@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { Sparkles, Loader2, Save, Trash2, Play, Clock, ChevronRight, X, FileText, Bot, Wand2 } from 'lucide-react'
+import { Sparkles, Loader2, Save, Trash2, Play, Clock, ChevronRight, X, FileText, Bot, Wand2, Brain } from 'lucide-react'
 import clsx from 'clsx'
+import RLTrainingPanel from '../components/RLTrainingPanel'
 
 const NL_STRATEGIES_KEY = 'nl-strategies'
 
@@ -164,7 +165,7 @@ async function autocompleteNL(input: string): Promise<AutocompleteSuggestion[]> 
 
 export default function StrategyBuilderPage() {
   const { showNotification } = useStore()
-  const [activeTab, setActiveTab] = useState<'new' | 'saved'>('new')
+  const [activeTab, setActiveTab] = useState<'new' | 'saved' | 'rl'>('new')
   const [nlInput, setNlInput] = useState('')
   const [generating, setGenerating] = useState(false)
   const [generatedConfig, setGeneratedConfig] = useState<StrategyConfig | null>(null)
@@ -362,6 +363,21 @@ export default function StrategyBuilderPage() {
               我的策略 ({savedStrategies.length})
             </div>
             {activeTab === 'saved' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary" />}
+          </button>
+          <button
+            onClick={() => setActiveTab('rl')}
+            className={clsx(
+              'flex-1 px-4 py-3 text-sm font-medium transition-colors relative',
+              activeTab === 'rl'
+                ? 'text-accent-primary bg-accent-primary/5'
+                : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary/50'
+            )}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Brain size={16} />
+              RL训练
+            </div>
+            {activeTab === 'rl' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary" />}
           </button>
         </div>
 
@@ -623,6 +639,13 @@ export default function StrategyBuilderPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* RL Training Tab */}
+        {activeTab === 'rl' && (
+          <div className="p-6">
+            <RLTrainingPanel />
           </div>
         )}
       </div>

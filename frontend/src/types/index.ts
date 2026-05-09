@@ -763,7 +763,45 @@ export interface SavedFactor {
   tags: string[];
 }
 
-// Factor screening
+// ============== Reinforcement Learning ==============
+
+export type RLAlgorithm = 'q-learning' | 'policy-gradient';
+
+export type RLStateSpace = 'MA5' | 'MA10' | 'MA20' | 'RSI' | 'MACD' | 'KDJ' | 'BOLL' | 'Volume';
+
+export type RLRewardFunction = 'total_return' | 'sharpe_ratio' | 'calmar_ratio' | 'max_drawdown_penalty';
+
+export interface RLConfig {
+  algorithm: RLAlgorithm;
+  stateSpace: RLStateSpace[];
+  rewardFunction: RLRewardFunction;
+  episodes: number;
+  learningRate: number;
+  epsilon: number;      // Q-Learning only
+  gamma: number;        // discount factor
+}
+
+export interface RLTrainingProgress {
+  currentEpisode: number;
+  totalEpisodes: number;
+  currentReward: number;
+  epsilon: number;
+  isRunning: boolean;
+  isPaused: boolean;
+}
+
+export interface RLTrainingResult {
+  episode: number;
+  reward: number;
+  equity: number;
+  sharpe: number;
+  maxDrawdown: number;
+}
+
+export type QTable = Record<string, number[]>;
+
+// ============== Factor screening ==============
+
 export interface FactorScreenerRequest {
   factors: FactorWeight[];
   symbols: string[];
