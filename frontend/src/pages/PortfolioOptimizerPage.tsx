@@ -14,7 +14,8 @@ import {
 import EfficientFrontierChart from '../components/EfficientFrontierChart';
 import OptimizerResultPanel from '../components/OptimizerResultPanel';
 import DrawdownOptimizerPanel from '../components/DrawdownOptimizerPanel';
-import { Loader2, PieChart, AlertTriangle, CheckCircle2, Settings2, Import, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
+import SnowballPanel from '../components/SnowballPanel';
+import { Loader2, PieChart, AlertTriangle, CheckCircle2, Settings2, Import, TrendingUp, TrendingDown, BarChart3, Snowflake } from 'lucide-react';
 import clsx from 'clsx';
 
 interface StockReturn {
@@ -28,7 +29,7 @@ interface StockReturn {
 }
 
 type OptimizationTarget = 'max_sharpe' | 'min_variance' | 'risk_parity';
-type OptimizerTab = 'weights' | 'frontier' | 'drawdown';
+type OptimizerTab = 'weights' | 'frontier' | 'drawdown' | 'snowball';
 
 export default function PortfolioOptimizerPage() {
   const { selectedStocks, showNotification, portfolio } = useStore();
@@ -354,11 +355,25 @@ export default function PortfolioOptimizerPage() {
           <TrendingDown size={14} />
           回撤优化
         </button>
+        <button
+          onClick={() => setActiveTab('snowball')}
+          className={clsx(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            activeTab === 'snowball'
+              ? "bg-accent-primary/10 text-accent-primary"
+              : "text-text-muted hover:text-text-secondary hover:bg-bg-tertiary"
+          )}
+        >
+          <Snowflake size={14} />
+          雪球回测
+        </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'drawdown' ? (
         <DrawdownOptimizerPanel />
+      ) : activeTab === 'snowball' ? (
+        <SnowballPanel />
       ) : loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 size={32} className="animate-spin text-accent-primary" />

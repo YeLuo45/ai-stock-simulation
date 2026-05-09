@@ -866,6 +866,49 @@ export interface WalkForwardResult {
   inSamplevsOOSRatio: number;    // IS vs OOS return ratio, overfitting detection
 }
 
+// ============== Snowball Autocallable ==============
+
+export interface SnowballConfig {
+  underlying: string;           // 挂钩标的代码
+  initialPrice: number;         // 期初价格
+  couponRate: number;           // 年化票息（如 0.20 = 20%）
+  knockOutBarrier: number;     // 敲出障碍（如 1.05 = 105%）
+  knockInBarrier: number;       // 敲入障碍（如 0.75 = 75%）
+  observationDates: string[];  // 观察日列表
+  tenure: number;               // 期限（月数）
+  direction: 'long' | 'short'; // 做多/做空雪球
+}
+
+export interface SnowballBacktestResult {
+  totalReturn: number;        // 总收益率
+  annualizedReturn: number;   // 年化收益率
+  maxDrawdown: number;         // 最大回撤
+  sharpe: number;              // Sharpe比率
+  knockOutRate: number;        // 敲出概率
+  knockInRate: number;         // 敲入概率
+  avgHoldingPeriod: number;   // 平均持有期（月）
+  pnlByScenario: {             // 不同情景表现
+    bull: number;              // 牛市情景收益
+    sideways: number;           // 震荡情景收益
+    bear: number;              // 熊市情景收益
+  };
+  monthlyPnl: number[];        // 每月PnL序列
+}
+
+export interface SnowballScenarioResult {
+  scenario: 'bull' | 'sideways' | 'bear';
+  totalReturn: number;
+  knockOutRate: number;
+  knockInRate: number;
+  avgHoldingPeriod: number;
+}
+
+export interface SnowballSensitivityPoint {
+  param1: number;
+  param2: number;
+  return: number;
+}
+
 // ============== Drawdown Optimization ==============
 
 export interface DrawdownOptimizationResult {
