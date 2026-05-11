@@ -1,12 +1,15 @@
 /**
  * Risk Controller Agent
  * Risk checks using drawdownEngine and positionAnalytics
+ * Supports MiniMax API LLM-driven decision when API key is available
  */
 
 import type { AgentMessage, AgentName, RiskResultPayload, RiskReasonCode } from '../messages';
 import { createAgentMessage } from '../messages';
 import { computeDrawdown, type DrawdownResult } from '../../services/drawdownEngine';
 import type { Position } from '../../types';
+import { hasApiKey, callWithJSONPrompt, saveAgentLLMOutput, getAgentSession } from './MiniMaxAgentService';
+import { buildContextSummary } from './AgentSession';
 
 export interface RiskControllerPayload {
   symbol: string;
@@ -26,6 +29,23 @@ const RISK_REJECTION_CODES: Record<string, RiskReasonCode> = {
   CONCENTRATION: { code: 'CON_01', detail: 'Single position concentration too high' },
 };
 
+const RISK_SYSTEM_PROMPT = `你是一位风控官，基于当前持仓、回撤和现金状况评估候选股风险，决定是否批准交易。
+
+请评估以下交易请求的风险，返回JSON格式：
+{
+  "approved": true/false,
+  "reason": "风险评估理由",
+  "positionValue": 持仓金额（仅买入时）
+}
+
+评估要点：
+1. 当前账户回撤是否超过阈值
+2. 现金余额是否充足
+3. 持仓集中度是否过高（单只股票不超过30%）
+4. 整体风险收益比是否合理
+
+只返回JSON，不要有其他文字。`;
+
 function checkRisk(payload: RiskControllerPayload): RiskResultPayload {
   const {
     action,
@@ -36,10 +56,8 @@ function checkRisk(payload: RiskControllerPayload): RiskResultPayload {
     maxDrawdownThreshold = -0.1,
   } = payload;
 
-  // Check current drawdown using drawdownEngine
   const drawdownResult: DrawdownResult = computeDrawdown();
 
-  // Check if drawdown exceeds threshold
   if (drawdownResult.currentDrawdown < maxDrawdownThreshold) {
     const reasonCode = maxDrawdownThreshold <= -0.1 ? 'DD_10' : 'DD_05';
     return {
@@ -50,9 +68,8 @@ function checkRisk(payload: RiskControllerPayload): RiskResultPayload {
     };
   }
 
-  // For buy orders, check cash sufficiency
   if (action === 'buy') {
-    const totalCost = quantity * price * 1.0003; // Include commission
+    const totalCost = quantity * price * 1.0003;
     if (portfolioCash < totalCost) {
       return {
         approved: false,
@@ -61,7 +78,6 @@ function checkRisk(payload: RiskControllerPayload): RiskResultPayload {
       };
     }
 
-    // Check position concentration (max 30% per position)
     const positionValue = quantity * price;
     const totalPortfolioValue = positions.reduce((sum, p) => sum + p.market_value, 0) + portfolioCash;
     const newWeight = positionValue / totalPortfolioValue;
@@ -74,7 +90,6 @@ function checkRisk(payload: RiskControllerPayload): RiskResultPayload {
     }
   }
 
-  // All checks passed
   return {
     approved: true,
     reason: 'Risk checks passed',
@@ -87,7 +102,7 @@ function checkRisk(payload: RiskControllerPayload): RiskResultPayload {
 export const RiskControllerAgent = {
   name: 'risk' as AgentName,
 
-  process(message: AgentMessage): AgentMessage {
+  async process(message: AgentMessage): Promise<AgentMessage> {
     const startTime = Date.now();
     try {
       if (message.type !== 'request') {
@@ -96,7 +111,64 @@ export const RiskControllerAgent = {
       }
 
       const payload = message.payload as RiskControllerPayload;
-      const result = checkRisk(payload);
+      const sessionId = message.traceId || `risk-${Date.now()}`;
+      let result: RiskResultPayload;
+
+      if (hasApiKey()) {
+        try {
+          const session = getAgentSession(sessionId);
+          const contextSummary = session ? buildContextSummary(session) : '无可用上下文';
+          const totalPortfolioValue = payload.positions.reduce((sum, p) => sum + p.market_value, 0) + payload.portfolioCash;
+
+          const userMessage = `交易请求:
+- 股票代码: ${payload.symbol}
+- 交易方向: ${payload.action}
+- 数量: ${payload.quantity}
+- 价格: ¥${payload.price.toFixed(2)}
+- 预估金额: ¥${(payload.quantity * payload.price).toFixed(2)}
+
+账户状态:
+- 现金: ¥${payload.portfolioCash.toFixed(2)}
+- 总市值: ¥${totalPortfolioValue.toFixed(2)}
+- 当前持仓数: ${payload.positions.length}只
+${contextSummary}
+
+请评估这笔交易的风险。`;
+
+          const llmResult = await callWithJSONPrompt<{
+            approved: boolean;
+            reason: string;
+            positionValue?: number;
+          }>(RISK_SYSTEM_PROMPT, userMessage, { sessionId });
+
+          if (llmResult.success && llmResult.data) {
+            const deterministicCheck = checkRisk(payload);
+            result = {
+              approved: llmResult.data.approved && deterministicCheck.approved,
+              reason: llmResult.data.reason || deterministicCheck.reason,
+              reasonCode: deterministicCheck.reasonCode,
+              portfolioValue: deterministicCheck.portfolioValue,
+              positionValue: llmResult.data.positionValue || deterministicCheck.positionValue,
+              drawdown: deterministicCheck.drawdown,
+            };
+
+            saveAgentLLMOutput(sessionId, 'risk', {
+              agentName: 'risk',
+              sessionId,
+              timestamp: Date.now(),
+              llmResponse: JSON.stringify(llmResult.data),
+              parsedOutput: llmResult.data as Record<string, unknown>,
+              latency: Date.now() - startTime,
+            });
+          } else {
+            result = checkRisk(payload);
+          }
+        } catch (llmErr) {
+          result = checkRisk(payload);
+        }
+      } else {
+        result = checkRisk(payload);
+      }
 
       const responsePayload = {
         ...result,

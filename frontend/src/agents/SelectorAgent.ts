@@ -1,12 +1,15 @@
 /**
  * Selector Agent
  * Candidate stock screening using multi-factor scoring
+ * Supports MiniMax API LLM-driven decision when API key is available
  */
 
 import { screenFactors } from '../services/factorEngine';
 import type { AgentMessage, AgentName, SelectedSignal } from './messages';
 import { createAgentMessage } from './messages';
 import type { FactorWeight, FactorScreenerResult } from '../types';
+import { hasApiKey, callWithJSONPrompt, saveAgentLLMOutput, getAgentSession } from './MiniMaxAgentService';
+import { buildContextSummary } from './AgentSession';
 
 export interface SelectorPayload {
   candidates: string[];
@@ -25,10 +28,43 @@ function selectTopCandidate(results: FactorScreenerResult[]): SelectedSignal | u
   };
 }
 
+const SELECTOR_SYSTEM_PROMPT = `你是一位多因子选股专家，基于账户余额、持仓和市场快照，从候选股中选择最优1~3只，给出选股理由。
+
+请从以下候选股票中选择最优的1-3只，返回JSON格式：
+{
+  "selections": [
+    {"symbol": "股票代码", "score": 0.85, "reason": "选股理由"}
+  ]
+}
+
+评分范围0-1，考虑因素：
+1. 账户现金余额是否充足
+2. 当前持仓分布和集中度
+3. 市场行情趋势
+4. 股票的流动性和基本面
+
+只返回JSON，不要有其他文字。`;
+
+function selectWithFactors(
+  candidates: string[],
+  factors: FactorWeight[],
+  limit: number
+): { candidates: FactorScreenerResult[]; topSignal: SelectedSignal | undefined } {
+  const results = screenFactors({
+    symbols: candidates,
+    factors,
+    limit,
+    sort_by: 'composite_score',
+    sort_desc: true,
+  });
+  const topSignal = selectTopCandidate(results);
+  return { candidates: results, topSignal };
+}
+
 export const SelectorAgent = {
   name: 'selector' as AgentName,
 
-  process(message: AgentMessage): AgentMessage {
+  async process(message: AgentMessage): Promise<AgentMessage> {
     const startTime = Date.now();
     try {
       if (message.type !== 'request') {
@@ -49,16 +85,70 @@ export const SelectorAgent = {
           { error: 'No factors provided' }, message.traceId);
       }
 
-      // Use factorEngine's screenFactors for multi-factor scoring
-      const results = screenFactors({
-        symbols: candidates,
-        factors,
-        limit,
-        sort_by: 'composite_score',
-        sort_desc: true,
-      });
+      const sessionId = message.traceId || `selector-${Date.now()}`;
+      let results: FactorScreenerResult[] = [];
+      let topSignal: SelectedSignal | undefined;
 
-      const topSignal = selectTopCandidate(results);
+      if (hasApiKey()) {
+        try {
+          const session = getAgentSession(sessionId);
+          const contextSummary = session ? buildContextSummary(session) : '无可用上下文';
+
+          const userMessage = `候选股票列表: ${candidates.join(', ')}
+
+${contextSummary}
+
+请选择最优1-3只股票进行投资。`;
+
+          const llmResult = await callWithJSONPrompt<{
+            selections: Array<{ symbol: string; score: number; reason: string }>;
+          }>(SELECTOR_SYSTEM_PROMPT, userMessage, { sessionId });
+
+          if (llmResult.success && llmResult.data?.selections) {
+            const selections = llmResult.data.selections;
+            const selectedSymbols = selections.map(s => s.symbol);
+            results = screenFactors({
+              symbols: selectedSymbols,
+              factors,
+              limit: selections.length,
+              sort_by: 'composite_score',
+              sort_desc: true,
+            });
+
+            if (selections.length > 0) {
+              const topSelection = selections[0];
+              const topResult = results.find(r => r.symbol === topSelection.symbol) || results[0];
+              topSignal = {
+                symbol: topSelection.symbol,
+                score: topSelection.score || topResult?.composite_score || 0,
+                reason: topSelection.reason || `综合评分 ${topResult?.composite_score.toFixed(3)}`,
+                timestamp: Date.now(),
+              };
+            }
+
+            saveAgentLLMOutput(sessionId, 'selector', {
+              agentName: 'selector',
+              sessionId,
+              timestamp: Date.now(),
+              llmResponse: JSON.stringify(llmResult.data),
+              parsedOutput: llmResult.data as Record<string, unknown>,
+              latency: Date.now() - startTime,
+            });
+          } else {
+            const fallback = selectWithFactors(candidates, factors, limit);
+            results = fallback.candidates;
+            topSignal = fallback.topSignal;
+          }
+        } catch (llmErr) {
+          const fallback = selectWithFactors(candidates, factors, limit);
+          results = fallback.candidates;
+          topSignal = fallback.topSignal;
+        }
+      } else {
+        const fallback = selectWithFactors(candidates, factors, limit);
+        results = fallback.candidates;
+        topSignal = fallback.topSignal;
+      }
 
       const responsePayload = {
         candidates: results,

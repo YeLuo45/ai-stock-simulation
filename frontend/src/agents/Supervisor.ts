@@ -14,6 +14,7 @@ import type {
 } from './messages';
 import { createAgentMessage, createTraceId } from './messages';
 import { updateAgentRun, addPipelineLog, savePipelineState } from './agentStorage';
+import { clearAgentSession } from './AgentSession';
 import { SelectorAgent } from './SelectorAgent';
 import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
@@ -82,7 +83,7 @@ export const Supervisor = {
         { candidates: config.candidates, factors: config.factors, limit: 5 },
         traceId
       );
-      const selectorResponse = SelectorAgent.process(selectorRequest);
+      const selectorResponse = await SelectorAgent.process(selectorRequest);
       selectorDuration = Date.now() - selectorStart;
 
       updateAgentRun('selector', 'success', selectorDuration);
@@ -121,6 +122,7 @@ export const Supervisor = {
     if (!state.selectedSignal) {
       state.endTime = Date.now();
       savePipelineState(state);
+      clearAgentSession(traceId);
       return { state, logs: [] };
     }
 
@@ -135,7 +137,7 @@ export const Supervisor = {
         { symbol: state.selectedSignal.symbol, action: 'buy' },
         traceId
       );
-      const backtesterResponse = BacktesterAgent.process(backtesterRequest);
+      const backtesterResponse = await BacktesterAgent.process(backtesterRequest);
       backtesterDuration = Date.now() - backtesterStart;
 
       updateAgentRun('backtester', 'success', backtesterDuration);
@@ -185,7 +187,7 @@ export const Supervisor = {
         },
         traceId
       );
-      const riskResponse = RiskControllerAgent.process(riskRequest);
+      const riskResponse = await RiskControllerAgent.process(riskRequest);
       riskDuration = Date.now() - riskStart;
 
       updateAgentRun('risk', 'success', riskDuration);
@@ -219,6 +221,7 @@ export const Supervisor = {
     if (!state.riskResult?.approved) {
       state.endTime = Date.now();
       savePipelineState(state);
+      clearAgentSession(traceId);
       return { state, logs: [] };
     }
 
@@ -281,6 +284,8 @@ export const Supervisor = {
       totalDuration,
       `Pipeline completed. Errors: ${state.errors.length}`
     );
+
+    clearAgentSession(traceId);
 
     return { state, logs: [] };
   },
