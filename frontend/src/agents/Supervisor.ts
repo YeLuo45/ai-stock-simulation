@@ -14,11 +14,12 @@ import type {
 } from './messages';
 import { createAgentMessage, createTraceId } from './messages';
 import { updateAgentRun, addPipelineLog, savePipelineState } from './agentStorage';
-import { clearAgentSession } from './AgentSession';
+import { clearAgentSession, getAgentSession } from './AgentSession';
 import { SelectorAgent } from './SelectorAgent';
 import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
+import { saveAgentMemory } from './AgentMemory';
 import type { Position } from '../types';
 
 export interface SupervisorConfig {
@@ -284,6 +285,47 @@ export const Supervisor = {
       totalDuration,
       `Pipeline completed. Errors: ${state.errors.length}`
     );
+
+    // Save to agent memory before clearing session
+    const session = getAgentSession(traceId);
+    if (session) {
+      const memory = {
+        sessionId: traceId,
+        timestamp: Date.now(),
+        agents: {
+          selector: session.selectorOutput?.parsedOutput ? {
+            symbol: state.selectedSignal?.symbol || '',
+            score: state.selectedSignal?.score || 0,
+            reason: (session.selectorOutput.parsedOutput as { reason?: string })?.reason || '',
+            llmResponse: session.selectorOutput.llmResponse || '',
+            tokens: session.selectorOutput.usage,
+          } : undefined,
+          backtester: session.backtesterOutput?.parsedOutput ? {
+            passed: state.backtestResult?.passed || false,
+            reason: state.backtestResult?.reason || '',
+            llmResponse: session.backtesterOutput.llmResponse || '',
+            metrics: state.backtestResult?.metrics,
+          } : undefined,
+          risk: session.riskOutput?.parsedOutput ? {
+            approved: state.riskResult?.approved || false,
+            reason: state.riskResult?.reason || '',
+            llmResponse: session.riskOutput.llmResponse || '',
+          } : undefined,
+          executor: session.executorOutput?.parsedOutput ? {
+            success: state.executionResult?.success || false,
+            executedQuantity: state.executionResult?.executedQuantity || 0,
+            executedPrice: state.executionResult?.executedPrice || 0,
+            llmResponse: session.executorOutput.llmResponse || '',
+          } : undefined,
+        },
+        tags: [],
+      };
+
+      // Only save if we have meaningful data
+      if (memory.agents.selector || memory.agents.backtester || memory.agents.risk || memory.agents.executor) {
+        saveAgentMemory(memory);
+      }
+    }
 
     clearAgentSession(traceId);
 
