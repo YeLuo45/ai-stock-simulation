@@ -20,6 +20,7 @@ import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
 import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
+import { getPaperTradeEngine } from './PaperTradeEngine';
 import type { Position, FactorScreenerResult } from '../types';
 
 export interface SupervisorConfig {
@@ -330,6 +331,36 @@ export const Supervisor = {
           executorDuration,
           `${state.executionResult.success ? 'SUCCESS' : 'FAILED'}: ${state.executionResult.error || 'Trade executed'}`
         );
+
+        // Paper Trade: simulate the execution
+        if (state.selectedSignal && state.executionResult?.success) {
+          try {
+            const engine = getPaperTradeEngine();
+            const symbol = state.selectedSignal.symbol;
+            const name = (state.selectedSignal as any).name || symbol;
+            const qty = state.executionResult.quantity || 100;
+            const price = state.executionResult.price || 100;
+            engine.openOrder(symbol, name, 'buy', qty, price, traceId);
+            // Save comparison with backtest result
+            if (state.backtestResult) {
+              const snap = engine.getSnapshot(traceId);
+              const stored = {
+                paperTrade: snap,
+                backtest: {
+                  totalReturn: state.backtestResult.totalReturn || 0,
+                  sharpeRatio: state.backtestResult.sharpeRatio || 0,
+                  maxDrawdown: state.backtestResult.maxDrawdown || 0,
+                  winRate: state.backtestResult.winRate || 0,
+                },
+                traceId,
+              };
+              localStorage.setItem('paper_trade_snapshots', JSON.stringify(stored));
+            }
+            logPipelineEntry(traceId, 'executor', 'paper_trade', 0, `Paper trade: buy ${qty} ${symbol} @ ${price}`);
+          } catch (ptErr) {
+            console.warn('[PaperTrade] Failed to record paper trade:', ptErr);
+          }
+        }
       }
     } catch (err) {
       executorDuration = Date.now() - cycleStartTime;

@@ -148,3 +148,40 @@ export const AGENT_BG_COLORS: Record<AgentName, string> = {
   risk: 'bg-yellow-500',
   executor: 'bg-purple-500',
 };
+
+// Paper Trade types
+export interface PaperTradeSnapshot {
+  traceId: string;
+  timestamp: number;
+  balance: number;
+  initialBalance: number;
+  positions: PaperPosition[];
+  orders: PaperOrder[];
+  realizedPnL: number;
+  unrealizedPnL: number;
+  totalPnL: number;
+  totalPnLPct: number;
+}
+
+export interface PaperPosition {
+  symbol: string;
+  name: string;
+  shares: number;
+  avgCost: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPct: number;
+}
+
+export interface PaperOrder {
+  id: string;
+  symbol: string;
+  name: string;
+  action: 'buy' | 'sell';
+  quantity: number;
+  price: number;
+  totalAmount: number;
+  timestamp: number;
+  traceId: string;
+}

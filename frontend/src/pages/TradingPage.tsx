@@ -14,6 +14,7 @@ import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, B
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
+import PaperTradePanel from "../components/PaperTradePanel";
 import DrawdownDashboard from "../components/DrawdownDashboard";
 import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
 
@@ -22,7 +23,7 @@ const PAGE_SIZE = 10;
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const brokerState = useBrokerStore();
-  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics">("positions");
+  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -1009,6 +1010,7 @@ export default function TradingPage() {
             { key: "history" as const, label: "历史", icon: <History size={14} /> },
             { key: "memory" as const, label: "记忆", icon: <Brain size={14} /> },
             { key: "analytics" as const, label: "分析", icon: <BarChart3 size={14} /> },
+            { key: "paper" as const, label: "模拟", icon: <BarChart3 size={14} /> },
           ]).map(tabItem => (
             <button
               key={tabItem.key}
@@ -1033,6 +1035,7 @@ export default function TradingPage() {
           {tab === "history" && renderHistory()}
           {tab === "memory" && <MemoryReviewPage />}
           {tab === "analytics" && <PositionAnalyticsPanel />}
+          {tab === "paper" && <PaperTradePanel />}
         </div>
       </div>
     </div>
