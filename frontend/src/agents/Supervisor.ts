@@ -19,7 +19,7 @@ import { SelectorAgent } from './SelectorAgent';
 import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
-import { saveAgentMemory } from './AgentMemory';
+import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
 import type { Position } from '../types';
 
 export interface SupervisorConfig {
@@ -323,7 +323,17 @@ export const Supervisor = {
 
       // Only save if we have meaningful data
       if (memory.agents.selector || memory.agents.backtester || memory.agents.risk || memory.agents.executor) {
-        saveAgentMemory(memory);
+        const memoryId = saveAgentMemory(memory);
+
+        // Add to outcome tracking queue if executor succeeded
+        if (memory.agents.executor?.success) {
+          addToOutcomeQueue({
+            memoryId,
+            symbol: state.selectedSignal?.symbol || memory.agents.selector?.symbol || '',
+            entryPrice: state.executionResult?.executedPrice || memory.agents.executor.executedPrice,
+            entryDate: Date.now(),
+          });
+        }
       }
     }
 

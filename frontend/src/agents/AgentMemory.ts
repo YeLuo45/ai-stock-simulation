@@ -39,6 +39,19 @@ export interface AgentMemory {
     topLosers?: string[];
   };
   tags: string[];
+  outcome?: {
+    tracked: boolean;
+    entryPrice: number;
+    latestPrice?: number;
+    latestDate?: number;
+    pnlPercent?: number;
+    pnlAbsolute?: number;
+    maxPrice?: number;
+    minPrice?: number;
+    exitPrice?: number;
+    exitDate?: number;
+    status: 'open' | 'closed';
+  };
 }
 
 interface QueryConfig {
@@ -48,6 +61,7 @@ interface QueryConfig {
   endDate?: number;
   tags?: string[];
   limit?: number;
+  withOutcome?: boolean;
 }
 
 interface MemoryStats {
@@ -59,6 +73,14 @@ interface MemoryStats {
 
 const STORAGE_KEY = 'agent_memories';
 const MAX_MEMORIES = 500;
+const OUTCOME_QUEUE_KEY = 'agent_outcome_queue';
+
+export interface OutcomeQueueItem {
+  memoryId: string;
+  symbol: string;
+  entryPrice: number;
+  entryDate: number;
+}
 
 function generateId(): string {
   return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -71,6 +93,8 @@ function autoTag(memory: AgentMemory): string[] {
   if (memory.agents.executor?.success && memory.agents.backtester?.passed) tags.push('full-pipeline');
   if (memory.agents.backtester?.passed) tags.push('backtest-passed');
   if (memory.agents.backtester && !memory.agents.backtester.passed) tags.push('backtest-failed');
+  if (memory.outcome?.status === 'closed' && (memory.outcome.pnlPercent ?? 0) > 0) tags.push('profit');
+  if (memory.outcome?.status === 'closed' && (memory.outcome.pnlPercent ?? 0) < 0) tags.push('loss');
   return tags;
 }
 
@@ -89,7 +113,7 @@ function saveAllMemories(memories: AgentMemory[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(memories));
 }
 
-export function saveAgentMemory(memory: Omit<AgentMemory, 'id'>): void {
+export function saveAgentMemory(memory: Omit<AgentMemory, 'id'>): string {
   const memories = getAllMemories();
 
   const newMemory: AgentMemory = {
@@ -103,6 +127,7 @@ export function saveAgentMemory(memory: Omit<AgentMemory, 'id'>): void {
   // Enforce max limit - remove oldest entries
   const trimmed = memories.slice(0, MAX_MEMORIES);
   saveAllMemories(trimmed);
+  return newMemory.id;
 }
 
 export function queryMemory(config: QueryConfig): AgentMemory[] {
@@ -199,7 +224,147 @@ export function getMemoryStats(): MemoryStats {
   };
 }
 
-export function buildMemoryContext(query: string, memories: AgentMemory[]): string {
+// Outcome Queue Functions
+export function addToOutcomeQueue(item: OutcomeQueueItem): void {
+  const queue = getOutcomeQueue();
+  // Avoid duplicates
+  const existing = queue.findIndex(q => q.memoryId === item.memoryId);
+  if (existing >= 0) {
+    queue[existing] = item;
+  } else {
+    queue.push(item);
+  }
+  localStorage.setItem(OUTCOME_QUEUE_KEY, JSON.stringify(queue));
+}
+
+export function getOutcomeQueue(): OutcomeQueueItem[] {
+  try {
+    const raw = localStorage.getItem(OUTCOME_QUEUE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as OutcomeQueueItem[];
+  } catch {
+    return [];
+  }
+}
+
+export function removeFromOutcomeQueue(memoryId: string): void {
+  const queue = getOutcomeQueue().filter(q => q.memoryId !== memoryId);
+  localStorage.setItem(OUTCOME_QUEUE_KEY, JSON.stringify(queue));
+}
+
+export function updateMemoryOutcome(memoryId: string, updates: Partial<AgentMemory['outcome']>): void {
+  const memories = getAllMemories();
+  const idx = memories.findIndex(m => m.id === memoryId);
+  if (idx < 0) return;
+
+  if (!memories[idx].outcome) {
+    memories[idx].outcome = {
+      tracked: false,
+      entryPrice: 0,
+      status: 'open',
+    };
+  }
+  memories[idx].outcome = { ...memories[idx].outcome!, ...updates };
+  // Re-tag after outcome update
+  memories[idx].tags = autoTag(memories[idx]);
+  saveAllMemories(memories);
+}
+
+export async function processOutcomeQueue(): Promise<void> {
+  const { getRealtimeQuote } = await import('../services/yahooFinance');
+  const memories = getAllMemories();
+  const queue = getOutcomeQueue();
+  const now = Date.now();
+  const STALE_DAYS = 30;
+  const STALE_MS = STALE_DAYS * 24 * 60 * 60 * 1000;
+
+  let changed = false;
+
+  // First, sync queue items to memory outcomes
+  for (const item of queue) {
+    const memIdx = memories.findIndex(m => m.id === item.memoryId);
+    if (memIdx >= 0) {
+      const mem = memories[memIdx];
+      if (!mem.outcome || !mem.outcome.tracked) {
+        // Initialize outcome from queue item
+        updateMemoryOutcome(item.memoryId, {
+          tracked: true,
+          entryPrice: item.entryPrice,
+          status: 'open',
+        });
+        changed = true;
+      }
+    } else {
+      // Memory doesn't exist, remove from queue
+      removeFromOutcomeQueue(item.memoryId);
+      changed = true;
+    }
+  }
+
+  // Re-fetch after potential updates
+  const updatedMemories = getAllMemories();
+
+  for (const memory of updatedMemories) {
+    // Only process open outcomes
+    if (memory.outcome?.status !== 'open') continue;
+
+    const symbol = memory.agents.selector?.symbol;
+    if (!symbol) continue;
+
+    try {
+      const quote = await getRealtimeQuote(symbol);
+      const latestPrice = quote.price;
+
+      // Stale detection: no price change or too old
+      const isStale = latestPrice === memory.outcome.entryPrice ||
+        (now - memory.timestamp) > STALE_MS;
+
+      const pnlAbsolute = latestPrice - memory.outcome.entryPrice;
+      const pnlPercent = (pnlAbsolute / memory.outcome.entryPrice) * 100;
+
+      const updates: Partial<AgentMemory['outcome']> = {
+        latestPrice,
+        latestDate: now,
+        pnlPercent,
+        pnlAbsolute,
+        maxPrice: memory.outcome.maxPrice
+          ? Math.max(memory.outcome.maxPrice, latestPrice)
+          : latestPrice,
+        minPrice: memory.outcome.minPrice
+          ? Math.min(memory.outcome.minPrice, latestPrice)
+          : latestPrice,
+      };
+
+      if (isStale || latestPrice === 0) {
+        updates.status = 'closed';
+        updates.exitPrice = latestPrice;
+        updates.exitDate = now;
+        removeFromOutcomeQueue(memory.id);
+      }
+
+      updateMemoryOutcome(memory.id, updates);
+      changed = true;
+    } catch {
+      // If quote fails, mark as stale closed
+      if (memory.outcome?.tracked) {
+        updateMemoryOutcome(memory.id, {
+          status: 'closed',
+          exitPrice: memory.outcome.latestPrice || memory.outcome.entryPrice,
+          exitDate: now,
+        });
+        removeFromOutcomeQueue(memory.id);
+        changed = true;
+      }
+    }
+  }
+
+  // If any changed, trigger a storage event for UI refresh
+  if (changed) {
+    window.dispatchEvent(new Event('storage'));
+  }
+}
+
+export function buildMemoryContext(query: string, memories: AgentMemory[], withOutcome = false): string {
   if (memories.length === 0) {
     return 'No relevant memories found.';
   }
@@ -239,6 +404,14 @@ export function buildMemoryContext(query: string, memories: AgentMemory[]): stri
       lines.push(`EXECUTOR: ${mem.agents.executor.success ? 'SUCCESS' : 'FAILED'}`);
       if (mem.agents.executor.success) {
         lines.push(`  Qty: ${mem.agents.executor.executedQuantity} @ ¥${mem.agents.executor.executedPrice.toFixed(2)}`);
+      }
+    }
+
+    if (withOutcome && mem.outcome?.tracked) {
+      const { entryPrice, latestPrice, pnlPercent, pnlAbsolute, status } = mem.outcome;
+      lines.push(`OUTCOME: ${status.toUpperCase()}`);
+      if (latestPrice !== undefined) {
+        lines.push(`  买入价 ¥${entryPrice.toFixed(2)}，最新价 ¥${latestPrice.toFixed(2)}，盈亏 ${pnlPercent !== undefined ? pnlPercent.toFixed(2) : 'N/A'}% (${pnlAbsolute !== undefined ? (pnlAbsolute > 0 ? '+' : '') + pnlAbsolute.toFixed(2) : 'N/A'})`);
       }
     }
 

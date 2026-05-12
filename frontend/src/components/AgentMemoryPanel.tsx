@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   queryMemory,
   getMemoryStats,
+  processOutcomeQueue,
   type AgentMemory,
 } from '../agents/AgentMemory';
 
@@ -20,6 +21,8 @@ const AgentMemoryPanel: React.FC = () => {
     recentTrend: 'improving' | 'declining' | 'stable';
   } | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [pnlFilter, setPnlFilter] = useState<'all' | 'profit' | 'loss'>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadData = useCallback(() => {
     const allMemories = queryMemory({
@@ -34,8 +37,27 @@ const AgentMemoryPanel: React.FC = () => {
   }, [searchSymbol, selectedTags]);
 
   useEffect(() => {
-    loadData();
+    const init = async () => {
+      setIsRefreshing(true);
+      try {
+        await processOutcomeQueue();
+      } finally {
+        setIsRefreshing(false);
+      }
+      loadData();
+    };
+    init();
   }, [loadData]);
+
+  const handleRefreshPnl = async () => {
+    setIsRefreshing(true);
+    try {
+      await processOutcomeQueue();
+      loadData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -126,7 +148,7 @@ const AgentMemoryPanel: React.FC = () => {
     );
   };
 
-  const allTags = ['executed', 'risk-rejected', 'full-pipeline', 'backtest-passed', 'backtest-failed'];
+  const allTags = ['executed', 'risk-rejected', 'full-pipeline', 'backtest-passed', 'backtest-failed', 'profit', 'loss'];
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
@@ -215,6 +237,35 @@ const AgentMemoryPanel: React.FC = () => {
             </button>
           </div>
 
+          {/* PnL Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">PnL:</span>
+            <div className="flex gap-1">
+              {(['all', 'profit', 'loss'] as const).map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => setPnlFilter(filter)}
+                  className={`px-2 py-0.5 text-xs rounded-full transition-colors ${
+                    pnlFilter === filter
+                      ? filter === 'profit' ? 'bg-green-500 text-white'
+                        : filter === 'loss' ? 'bg-red-500 text-white'
+                        : 'bg-blue-500 text-white'
+                      : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                  }`}
+                >
+                  {filter === 'all' ? '全部' : filter === 'profit' ? '盈利' : '亏损'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleRefreshPnl}
+              disabled={isRefreshing}
+              className="ml-auto px-2 py-0.5 text-xs bg-indigo-500 hover:bg-indigo-600 text-white rounded transition-colors disabled:opacity-50"
+            >
+              {isRefreshing ? '刷新中...' : '刷新收益'}
+            </button>
+          </div>
+
           {/* Tag Filters */}
           <div className="flex flex-wrap gap-1">
             {allTags.map(tag => (
@@ -247,26 +298,60 @@ const AgentMemoryPanel: React.FC = () => {
                 No memories yet. Run some pipelines to build your memory.
               </div>
             ) : (
-              memories.map(memory => (
+              memories
+                .filter(mem => {
+                  if (pnlFilter === 'all') return true;
+                  if (pnlFilter === 'profit') return mem.tags.includes('profit');
+                  if (pnlFilter === 'loss') return mem.tags.includes('loss');
+                  return true;
+                })
+                .map(memory => (
                 <div
                   key={memory.id}
                   className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-500">
-                      {formatTime(memory.timestamp)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">
+                        {formatTime(memory.timestamp)}
+                      </span>
+                      {memory.outcome && (
+                        <span className={`px-1.5 py-0.5 text-xs rounded ${
+                          memory.outcome.status === 'open'
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                        }`}>
+                          {memory.outcome.status === 'open' ? '持仓中' : '已平仓'}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex gap-1 flex-wrap justify-end">
                       {memory.tags.map(tag => (
                         <span
                           key={tag}
-                          className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded"
+                          className={`px-1.5 py-0.5 text-xs rounded ${
+                            tag === 'profit' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                            tag === 'loss' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                            'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                          }`}
                         >
                           {tag}
                         </span>
                       ))}
                     </div>
                   </div>
+                  {memory.outcome?.tracked && memory.outcome.latestPrice && (
+                    <div className={`text-xs font-medium mb-2 px-2 py-1 rounded ${
+                      (memory.outcome.pnlPercent ?? 0) >= 0
+                        ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                        : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                    }`}>
+                      买入价 ¥{memory.outcome.entryPrice.toFixed(2)} → 最新价 ¥{memory.outcome.latestPrice.toFixed(2)}
+                      {' '}
+                      盈亏: {memory.outcome.pnlPercent !== undefined ? (memory.outcome.pnlPercent > 0 ? '+' : '') + memory.outcome.pnlPercent.toFixed(2) : 'N/A'}%
+                      ({memory.outcome.pnlAbsolute !== undefined ? (memory.outcome.pnlAbsolute > 0 ? '+' : '') + '¥' + memory.outcome.pnlAbsolute.toFixed(2) : 'N/A'})
+                    </div>
+                  )}
                   {renderAgentSummary(memory)}
                 </div>
               ))
