@@ -36,6 +36,11 @@ export interface PipelineState {
   errors: PipelineError[];
   startTime: number;
   endTime?: number;
+  // Parallel processing fields
+  parallelCandidates?: SelectedSignal[];
+  parallelBacktestResults?: BacktestResultPayload[];
+  parallelRiskResults?: RiskResultPayload[];
+  selectedForExecution?: SelectedSignal;
 }
 
 export interface SelectedSignal {

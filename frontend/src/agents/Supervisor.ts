@@ -1,6 +1,6 @@
 /**
  * Supervisor - Main Pipeline Orchestrator
- * Runs the complete pipeline: Selector → Backtester → Risk Controller → Executor
+ * Runs the complete pipeline: Selector → Backtester (parallel) → Risk Controller (parallel) → Executor
  */
 
 import type {
@@ -20,7 +20,7 @@ import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
 import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
-import type { Position } from '../types';
+import type { Position, FactorScreenerResult } from '../types';
 
 export interface SupervisorConfig {
   candidates: string[];
@@ -28,6 +28,7 @@ export interface SupervisorConfig {
   positions: Position[];
   portfolioCash: number;
   maxDrawdownThreshold?: number;
+  maxCandidates?: number;  // Max parallel candidates, default 5
 }
 
 export interface RunCycleResult {
@@ -61,6 +62,7 @@ export const Supervisor = {
   async runCycle(config: SupervisorConfig): Promise<RunCycleResult> {
     const traceId = createTraceId();
     const cycleStartTime = Date.now();
+    const maxCandidates = config.maxCandidates || 5;
 
     const state: PipelineState = {
       traceId,
@@ -75,13 +77,14 @@ export const Supervisor = {
 
     // Step 1: Selector
     let selectorDuration = 0;
+    let selectorCandidates: FactorScreenerResult[] = [];
     try {
       const selectorStart = Date.now();
       const selectorRequest = createAgentMessage(
         'supervisor',
         'selector',
         'request',
-        { candidates: config.candidates, factors: config.factors, limit: 5 },
+        { candidates: config.candidates, factors: config.factors, limit: maxCandidates },
         traceId
       );
       const selectorResponse = await SelectorAgent.process(selectorRequest);
@@ -99,17 +102,25 @@ export const Supervisor = {
       } else {
         const responseData = selectorResponse.payload as {
           topSignal?: SelectedSignal;
+          candidates?: FactorScreenerResult[];
           duration: number;
         };
+        selectorCandidates = responseData.candidates || [];
         state.selectedSignal = responseData.topSignal;
+        state.parallelCandidates = selectorCandidates.map(c => ({
+          symbol: c.symbol,
+          score: c.composite_score,
+          reason: `综合评分 ${c.composite_score.toFixed(3)}，排名第 ${c.rank}`,
+          timestamp: Date.now(),
+        }));
         logPipelineEntry(
           traceId,
           'selector',
           'select',
           selectorDuration,
           state.selectedSignal
-            ? `Selected ${state.selectedSignal.symbol} (score: ${state.selectedSignal.score.toFixed(3)})`
-            : 'No signal selected'
+            ? `Selected ${state.selectedSignal.symbol} (score: ${state.selectedSignal.score.toFixed(3)}) from ${selectorCandidates.length} candidates`
+            : `No signal selected, ${selectorCandidates.length} candidates available`
         );
       }
     } catch (err) {
@@ -120,111 +131,165 @@ export const Supervisor = {
       logPipelineEntry(traceId, 'selector', 'select', selectorDuration, `Error: ${errorMsg}`);
     }
 
-    if (!state.selectedSignal) {
+    if (selectorCandidates.length === 0) {
       state.endTime = Date.now();
       savePipelineState(state);
       clearAgentSession(traceId);
       return { state, logs: [] };
     }
 
-    // Step 2: Backtester
+    // Take top N candidates for parallel processing
+    const topCandidates = selectorCandidates.slice(0, maxCandidates);
+
+    // Step 2: Parallel Backtester
     let backtesterDuration = 0;
+    const backtestMap = new Map<string, BacktestResultPayload>();
     try {
       const backtesterStart = Date.now();
-      const backtesterRequest = createAgentMessage(
-        'supervisor',
-        'backtester',
-        'request',
-        { symbol: state.selectedSignal.symbol, action: 'buy' },
-        traceId
+
+      // Execute backtester in parallel for all top candidates
+      const backtestPromises = topCandidates.map(candidate =>
+        BacktesterAgent.process(createAgentMessage(
+          'supervisor',
+          'backtester',
+          'request',
+          { symbol: candidate.symbol, action: 'buy' },
+          traceId
+        ))
       );
-      const backtesterResponse = await BacktesterAgent.process(backtesterRequest);
+      const backtestResponses = await Promise.all(backtestPromises);
       backtesterDuration = Date.now() - backtesterStart;
 
+      // Parse results into symbol -> result map
+      for (const [i, response] of backtestResponses.entries()) {
+        if (response.type === 'response') {
+          backtestMap.set(topCandidates[i].symbol, response.payload as BacktestResultPayload);
+        } else if (response.type === 'error') {
+          // Mark as failed if error response
+          backtestMap.set(topCandidates[i].symbol, {
+            symbol: topCandidates[i].symbol,
+            passed: false,
+            reason: (response.payload as { error: string }).error || 'Backtester error',
+          });
+        }
+      }
+
+      state.parallelBacktestResults = Array.from(backtestMap.values());
       updateAgentRun('backtester', 'success', backtesterDuration);
 
-      if (backtesterResponse.type === 'error') {
-        state.errors.push({
-          agent: 'backtester',
-          message: (backtesterResponse.payload as { error: string }).error || 'Backtester error',
-          timestamp: Date.now(),
-        });
-        logPipelineEntry(traceId, 'backtester', 'backtest', backtesterDuration, 'Error in backtester');
-      } else {
-        const responseData = backtesterResponse.payload as BacktestResultPayload & { duration: number };
-        state.backtestResult = responseData;
-        logPipelineEntry(
-          traceId,
-          'backtester',
-          'backtest',
-          backtesterDuration,
-          `${state.backtestResult.passed ? 'PASSED' : 'FAILED'}: ${state.backtestResult.reason}`
-        );
-      }
+      const passedCount = Array.from(backtestMap.values()).filter(r => r.passed).length;
+      logPipelineEntry(
+        traceId,
+        'backtester',
+        'backtest_parallel',
+        backtesterDuration,
+        `Backtested ${topCandidates.length} candidates, ${passedCount} passed`
+      );
     } catch (err) {
       backtesterDuration = Date.now() - cycleStartTime;
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       updateAgentRun('backtester', 'error', backtesterDuration, errorMsg);
       state.errors.push({ agent: 'backtester', message: errorMsg, timestamp: Date.now() });
-      logPipelineEntry(traceId, 'backtester', 'backtest', backtesterDuration, `Error: ${errorMsg}`);
+      logPipelineEntry(traceId, 'backtester', 'backtest_parallel', backtesterDuration, `Error: ${errorMsg}`);
     }
 
-    // Step 3: Risk Controller
+    // Step 3: Parallel Risk Controller
     let riskDuration = 0;
+    const riskMap = new Map<string, RiskResultPayload>();
+    // Only run risk check on candidates that passed backtest
+    const riskEligibleCandidates = topCandidates.filter(c => {
+      const bt = backtestMap.get(c.symbol);
+      return bt?.passed;
+    });
+
     try {
       const riskStart = Date.now();
-      const riskRequest = createAgentMessage(
-        'supervisor',
-        'risk',
-        'request',
-        {
-          symbol: state.selectedSignal.symbol,
-          action: 'buy',
-          quantity: 100,
-          price: 100,
-          positions: config.positions,
-          portfolioCash: config.portfolioCash,
-          maxDrawdownThreshold: config.maxDrawdownThreshold ?? -0.1,
-        },
-        traceId
-      );
-      const riskResponse = await RiskControllerAgent.process(riskRequest);
-      riskDuration = Date.now() - riskStart;
 
+      if (riskEligibleCandidates.length > 0) {
+        const riskPromises = riskEligibleCandidates.map(candidate =>
+          RiskControllerAgent.process(createAgentMessage(
+            'supervisor',
+            'risk',
+            'request',
+            {
+              symbol: candidate.symbol,
+              action: 'buy',
+              quantity: 100,
+              price: 100,
+              positions: config.positions,
+              portfolioCash: config.portfolioCash,
+              maxDrawdownThreshold: config.maxDrawdownThreshold ?? -0.1,
+            },
+            traceId
+          ))
+        );
+        const riskResponses = await Promise.all(riskPromises);
+
+        // Parse results into symbol -> result map
+        for (const [i, response] of riskResponses.entries()) {
+          if (response.type === 'response') {
+            riskMap.set(riskEligibleCandidates[i].symbol, response.payload as RiskResultPayload);
+          } else if (response.type === 'error') {
+            // Mark as unknown if error response
+            riskMap.set(riskEligibleCandidates[i].symbol, {
+              approved: false,
+              reason: (response.payload as { error: string }).error || 'Risk controller error',
+            });
+          }
+        }
+      }
+
+      riskDuration = Date.now() - riskStart;
+      state.parallelRiskResults = Array.from(riskMap.values());
       updateAgentRun('risk', 'success', riskDuration);
 
-      if (riskResponse.type === 'error') {
-        state.errors.push({
-          agent: 'risk',
-          message: (riskResponse.payload as { error: string }).error || 'Risk error',
-          timestamp: Date.now(),
-        });
-        logPipelineEntry(traceId, 'risk', 'risk_check', riskDuration, 'Error in risk controller');
-      } else {
-        const responseData = riskResponse.payload as RiskResultPayload & { duration: number };
-        state.riskResult = responseData;
-        logPipelineEntry(
-          traceId,
-          'risk',
-          'risk_check',
-          riskDuration,
-          `${state.riskResult.approved ? 'APPROVED' : 'REJECTED'}: ${state.riskResult.reason}`
-        );
-      }
+      const approvedCount = Array.from(riskMap.values()).filter(r => r.approved).length;
+      logPipelineEntry(
+        traceId,
+        'risk',
+        'risk_check_parallel',
+        riskDuration,
+        `Risk checked ${riskEligibleCandidates.length} candidates, ${approvedCount} approved`
+      );
     } catch (err) {
       riskDuration = Date.now() - cycleStartTime;
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       updateAgentRun('risk', 'error', riskDuration, errorMsg);
       state.errors.push({ agent: 'risk', message: errorMsg, timestamp: Date.now() });
-      logPipelineEntry(traceId, 'risk', 'risk_check', riskDuration, `Error: ${errorMsg}`);
+      logPipelineEntry(traceId, 'risk', 'risk_check_parallel', riskDuration, `Error: ${errorMsg}`);
     }
 
-    if (!state.riskResult?.approved) {
+    // Step 3.5: 综合评分选最优
+    // Filter candidates that passed both backtest and risk
+    const validCandidates = topCandidates.filter(c => {
+      const bt = backtestMap.get(c.symbol);
+      const risk = riskMap.get(c.symbol);
+      return bt?.passed && risk?.approved;
+    });
+
+    if (validCandidates.length === 0) {
+      // No valid candidates, pipeline terminates
       state.endTime = Date.now();
       savePipelineState(state);
       clearAgentSession(traceId);
       return { state, logs: [] };
     }
+
+    // Select best candidate by selector score (composite_score)
+    validCandidates.sort((a, b) => b.composite_score - a.composite_score);
+    const selectedCandidate = validCandidates[0];
+
+    state.selectedSignal = {
+      symbol: selectedCandidate.symbol,
+      score: selectedCandidate.composite_score,
+      reason: `并行筛选：综合评分最高 (${selectedCandidate.composite_score.toFixed(3)})`,
+      timestamp: Date.now(),
+    };
+    state.selectedForExecution = state.selectedSignal;
+
+    // Set single backtestResult and riskResult for backward compatibility
+    state.backtestResult = backtestMap.get(selectedCandidate.symbol);
+    state.riskResult = riskMap.get(selectedCandidate.symbol);
 
     // Step 4: Executor
     let executorDuration = 0;
@@ -283,7 +348,7 @@ export const Supervisor = {
       'supervisor',
       'cycle_complete',
       totalDuration,
-      `Pipeline completed. Errors: ${state.errors.length}`
+      `Pipeline completed. Selected: ${state.selectedSignal?.symbol}. Errors: ${state.errors.length}`
     );
 
     // Save to agent memory before clearing session
