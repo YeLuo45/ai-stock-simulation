@@ -141,7 +141,7 @@ ${contextSummary}
               urgency: string;
               notes: string;
             };
-          }>(EXECUTOR_SYSTEM_PROMPT, userMessage, { sessionId });
+          }>(EXECUTOR_SYSTEM_PROMPT, userMessage, { sessionId, agentName: 'executor' });
 
           if (llmResult.success && llmResult.data) {
             const plan = llmResult.data.executionPlan;

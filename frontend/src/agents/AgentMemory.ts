@@ -3,6 +3,15 @@
  * Cross-session LLM decision memory using localStorage
  */
 
+import type { AgentName } from './messages';
+
+export interface ConversationTurn {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  tokens?: { input: number; output: number };
+}
+
 export interface AgentMemory {
   id: string;
   sessionId: string;
@@ -14,23 +23,27 @@ export interface AgentMemory {
       reason: string;
       llmResponse: string;
       tokens?: { input: number; output: number };
+      conversation?: ConversationTurn[];
     };
     backtester?: {
       passed: boolean;
       reason: string;
       llmResponse: string;
       metrics?: { totalReturn: number; sharpeRatio: number; winRate: number };
+      conversation?: ConversationTurn[];
     };
     risk?: {
       approved: boolean;
       reason: string;
       llmResponse: string;
+      conversation?: ConversationTurn[];
     };
     executor?: {
       success: boolean;
       executedQuantity: number;
       executedPrice: number;
       llmResponse: string;
+      conversation?: ConversationTurn[];
     };
   };
   marketContext?: {

@@ -5,10 +5,11 @@
  */
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
-import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download, PieChart, List } from "lucide-react";
+import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download, PieChart, List, MessageSquare } from "lucide-react";
 import clsx from "clsx";
 import OutcomeBadge from "../components/OutcomeBadge";
 import { getMemoryEntries } from "../services/storage";
+import ConversationPanel from "../components/ConversationPanel";
 
 interface MemoryStatsData {
   total: number;
@@ -76,7 +77,7 @@ export default function MemoryReviewPage() {
   const [searchKw, setSearchKw] = useState("");
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [viewTab, setViewTab] = useState<"list" | "stats">("list");
+  const [viewTab, setViewTab] = useState<"list" | "stats" | "conversation">("list");
   const [_stats, setStats] = useState<MemoryStatsData|null>(null);
 
   const loadEntries = () => {
@@ -293,31 +294,43 @@ export default function MemoryReviewPage() {
             >
               <PieChart size={12} /> 统计
             </button>
+            <button
+              onClick={() => setViewTab("conversation")}
+              className={clsx(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                viewTab === "conversation"
+                  ? "bg-accent-primary/10 text-accent-primary"
+                  : "text-text-muted hover:text-text-secondary"
+              )}
+            >
+              <MessageSquare size={12} /> 对话
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            value={searchKw}
-            onChange={(e) => { setSearchKw(e.target.value); setPage(1); }}
-            placeholder="搜索记忆..."
-            className="w-full pl-9 pr-4 py-2 bg-bg-secondary border border-border-color rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
-          />
-          {searchKw && (
-            <button
-              onClick={() => setSearchKw("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-            >
-              <X size={12} />
-            </button>
-          )}
-        </div>
+      {/* Filters - only show for list/stats views */}
+      {viewTab !== "conversation" && (
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              value={searchKw}
+              onChange={(e) => { setSearchKw(e.target.value); setPage(1); }}
+              placeholder="搜索记忆..."
+              className="w-full pl-9 pr-4 py-2 bg-bg-secondary border border-border-color rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
+            />
+            {searchKw && (
+              <button
+                onClick={() => setSearchKw("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
 
         {/* Type filter */}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -369,28 +382,36 @@ export default function MemoryReviewPage() {
           ))}
         </div>
       </div>
+      )}
 
+      {/* Conversation View */}
+      {viewTab === "conversation" ? (
+        <ConversationPanel />
+      ) : (
+        <>
       {/* Stats bar */}
-      <div className="flex items-center gap-4 px-4 py-3 bg-bg-secondary border border-border-color rounded-xl">
-        <div className="flex items-center gap-2">
-          <Clock size={14} className="text-text-muted" />
-          <span className="text-xs text-text-muted">共</span>
-          <span className="text-sm font-mono font-bold text-accent-primary">{filtered.length}</span>
-          <span className="text-xs text-text-muted">条记录</span>
+      {viewTab === "stats" && (
+        <div className="flex items-center gap-4 px-4 py-3 bg-bg-secondary border border-border-color rounded-xl">
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="text-text-muted" />
+            <span className="text-xs text-text-muted">共</span>
+            <span className="text-sm font-mono font-bold text-accent-primary">{filtered.length}</span>
+            <span className="text-xs text-text-muted">条记录</span>
+          </div>
+          {filterType !== "all" && (
+            <div className="flex items-center gap-1.5 text-xs text-text-muted">
+              <span>筛选:</span>
+              <span className={TYPE_CONFIG[filterType].color}>{TYPE_CONFIG[filterType].label}</span>
+            </div>
+          )}
+          {searchKw && (
+            <div className="flex items-center gap-1.5 text-xs text-text-muted">
+              <span>关键词:</span>
+              <span className="text-accent-primary">"{searchKw}"</span>
+            </div>
+          )}
         </div>
-        {filterType !== "all" && (
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-            <span>筛选:</span>
-            <span className={TYPE_CONFIG[filterType].color}>{TYPE_CONFIG[filterType].label}</span>
-          </div>
-        )}
-        {searchKw && (
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-            <span>关键词:</span>
-            <span className="text-accent-primary">"{searchKw}"</span>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Entries List */}
       {paginated.length > 0 ? (
@@ -529,6 +550,8 @@ export default function MemoryReviewPage() {
             <ChevronDown size={16} className="-rotate-90" />
           </button>
         </div>
+      )}
+        </>
       )}
     </div>
   );

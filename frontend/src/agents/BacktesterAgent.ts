@@ -89,7 +89,7 @@ ${contextSummary}
             sharpeRatio?: number;
             maxDrawdown?: number;
             winRate?: number;
-          }>(BACKTESTER_SYSTEM_PROMPT, userMessage, { sessionId });
+          }>(BACKTESTER_SYSTEM_PROMPT, userMessage, { sessionId, agentName: 'backtester' });
 
           if (llmResult.success && llmResult.data) {
             result = {

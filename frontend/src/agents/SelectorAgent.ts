@@ -102,7 +102,7 @@ ${contextSummary}
 
           const llmResult = await callWithJSONPrompt<{
             selections: Array<{ symbol: string; score: number; reason: string }>;
-          }>(SELECTOR_SYSTEM_PROMPT, userMessage, { sessionId });
+          }>(SELECTOR_SYSTEM_PROMPT, userMessage, { sessionId, agentName: 'selector' });
 
           if (llmResult.success && llmResult.data?.selections) {
             const selections = llmResult.data.selections;

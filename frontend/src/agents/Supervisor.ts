@@ -20,6 +20,7 @@ import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
 import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
+import { AgentConversationStore } from './AgentConversationStore';
 import { getPaperTradeEngine } from './PaperTradeEngine';
 import type { Position, FactorScreenerResult } from '../types';
 
@@ -385,6 +386,12 @@ export const Supervisor = {
     // Save to agent memory before clearing session
     const session = getAgentSession(traceId);
     if (session) {
+      // Get conversation history for each agent
+      const selectorConversation = AgentConversationStore.getConversation(traceId, 'selector');
+      const backtesterConversation = AgentConversationStore.getConversation(traceId, 'backtester');
+      const riskConversation = AgentConversationStore.getConversation(traceId, 'risk');
+      const executorConversation = AgentConversationStore.getConversation(traceId, 'executor');
+
       const memory = {
         sessionId: traceId,
         timestamp: Date.now(),
@@ -395,23 +402,27 @@ export const Supervisor = {
             reason: (session.selectorOutput.parsedOutput as { reason?: string })?.reason || '',
             llmResponse: session.selectorOutput.llmResponse || '',
             tokens: session.selectorOutput.usage,
+            conversation: selectorConversation,
           } : undefined,
           backtester: session.backtesterOutput?.parsedOutput ? {
             passed: state.backtestResult?.passed || false,
             reason: state.backtestResult?.reason || '',
             llmResponse: session.backtesterOutput.llmResponse || '',
             metrics: state.backtestResult?.metrics,
+            conversation: backtesterConversation,
           } : undefined,
           risk: session.riskOutput?.parsedOutput ? {
             approved: state.riskResult?.approved || false,
             reason: state.riskResult?.reason || '',
             llmResponse: session.riskOutput.llmResponse || '',
+            conversation: riskConversation,
           } : undefined,
           executor: session.executorOutput?.parsedOutput ? {
             success: state.executionResult?.success || false,
             executedQuantity: state.executionResult?.executedQuantity || 0,
             executedPrice: state.executionResult?.executedPrice || 0,
             llmResponse: session.executorOutput.llmResponse || '',
+            conversation: executorConversation,
           } : undefined,
         },
         tags: [],

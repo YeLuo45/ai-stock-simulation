@@ -139,7 +139,7 @@ ${contextSummary}
             approved: boolean;
             reason: string;
             positionValue?: number;
-          }>(RISK_SYSTEM_PROMPT, userMessage, { sessionId });
+          }>(RISK_SYSTEM_PROMPT, userMessage, { sessionId, agentName: 'risk' });
 
           if (llmResult.success && llmResult.data) {
             const deterministicCheck = checkRisk(payload);

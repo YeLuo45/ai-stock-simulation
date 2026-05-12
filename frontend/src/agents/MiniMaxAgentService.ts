@@ -3,6 +3,9 @@
  * LLM API integration for agent decision-making
  */
 
+import { AgentConversationStore } from './AgentConversationStore';
+import type { AgentName } from './messages';
+
 export interface MiniMaxResponse {
   content: string;
   usage?: {
@@ -161,7 +164,7 @@ export async function callMiniMaxAgent(
 export async function callWithJSONPrompt<T>(
   systemPrompt: string,
   userMessage: string,
-  options?: { model?: string; sessionId?: string }
+  options?: { model?: string; sessionId?: string; agentName?: AgentName }
 ): Promise<{ success: boolean; data?: T; error?: string }> {
   const messages: MiniMaxMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -171,6 +174,18 @@ export async function callWithJSONPrompt<T>(
   const result = await callMiniMaxAgent(messages, options);
   if (!result.success || !result.data) {
     return { success: false, error: result.error };
+  }
+
+  // Track conversation turn if sessionId and agentName are provided
+  if (options?.sessionId && options?.agentName) {
+    const tokens = result.data.usage ? {
+      input: result.data.usage.input_tokens,
+      output: result.data.usage.output_tokens,
+    } : undefined;
+    // Add conversation turns: system, user, assistant
+    AgentConversationStore.addTurn(options.sessionId, options.agentName, 'system', systemPrompt);
+    AgentConversationStore.addTurn(options.sessionId, options.agentName, 'user', userMessage);
+    AgentConversationStore.addTurn(options.sessionId, options.agentName, 'assistant', result.data.content, tokens);
   }
 
   const parsed = parseJSONSafely(result.data.content);
