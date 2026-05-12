@@ -7,8 +7,9 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 import clsx from 'clsx'
 import type { BacktestResponse } from '../types'
 import WalkForwardPanel from '../components/WalkForwardPanel'
+import MonteCarloPanel from '../components/MonteCarloPanel'
 
-type BacktestTab = 'backtest' | 'walkforward'
+type BacktestTab = 'backtest' | 'walkforward' | 'montecarlo'
 
 export default function BacktestPage() {
   const { showNotification } = useStore()
@@ -197,10 +198,23 @@ export default function BacktestPage() {
         >
           滚动回测
         </button>
+        <button
+          onClick={() => setActiveTab('montecarlo')}
+          className={clsx(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+            activeTab === 'montecarlo'
+              ? 'bg-accent-primary text-bg-primary'
+              : 'text-text-muted hover:text-text-primary'
+          )}
+        >
+          Monte Carlo
+        </button>
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'walkforward' ? (
+      {activeTab === 'montecarlo' ? (
+        <MonteCarloPanel />
+      ) : activeTab === 'walkforward' ? (
         <WalkForwardPanel
           strategyName={strategyName || '均线回归策略'}
           strategyParams={{}}
