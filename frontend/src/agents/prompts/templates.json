@@ -1,0 +1,25 @@
+{
+  "agents": {
+    "BullDebaterAgent": {
+      "current": "aggressive-v1",
+      "versions": {
+        "aggressive-v1": { "path": "bull-debater/aggressive-v1.md", "description": "激进多方，强调技术突破和情绪溢价" },
+        "moderate-v1": { "path": "bull-debater/moderate-v1.md", "description": "温和多方，平衡估值与成长" }
+      }
+    },
+    "BearDebaterAgent": {
+      "current": "cautious-v1",
+      "versions": {
+        "cautious-v1": { "path": "bear-debater/cautious-v1.md", "description": "谨慎空方，强调风险控制和防守" },
+        "bearish-v1": { "path": "bear-debater/bearish-v1.md", "description": "激进空方，强调利空因素和技术破位" }
+      }
+    },
+    "JudgeAgent": {
+      "current": "balanced-v1",
+      "versions": {
+        "balanced-v1": { "path": "judge/balanced-v1.md", "description": "均衡裁判，公平评估多空双方" },
+        "strict-v1": { "path": "judge/strict-v1.md", "description": "严格裁判，高标准筛选信号" }
+      }
+    }
+  }
+}
