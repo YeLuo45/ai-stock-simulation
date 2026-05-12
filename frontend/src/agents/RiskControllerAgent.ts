@@ -10,6 +10,7 @@ import { computeDrawdown, type DrawdownResult } from '../../services/drawdownEng
 import type { Position } from '../../types';
 import { hasApiKey, callWithJSONPrompt, saveAgentLLMOutput, getAgentSession } from './MiniMaxAgentService';
 import { buildContextSummary } from './AgentSession';
+import { NotificationService } from '../services/NotificationService';
 
 export interface RiskControllerPayload {
   symbol: string;
@@ -174,6 +175,20 @@ ${contextSummary}
         ...result,
         duration: Date.now() - startTime,
       };
+
+      // Send notification if risk was rejected
+      if (!result.approved) {
+        NotificationService.sendAlert({
+          level: 'critical',
+          title: '风控拒绝交易',
+          message: result.reason || '风险检查未通过，交易被拒绝',
+          metadata: {
+            symbol: payload.symbol,
+            action: payload.action,
+            reasonCode: result.reasonCode?.code,
+          },
+        });
+      }
 
       return createAgentMessage('risk', 'supervisor', 'response', responsePayload, message.traceId);
     } catch (err) {

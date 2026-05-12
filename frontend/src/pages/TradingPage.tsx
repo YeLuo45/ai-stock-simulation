@@ -10,12 +10,13 @@ import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } f
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
 import type { MemoryEntry } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield, Bell } from "lucide-react";
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
 import PaperTradePanel from "../components/PaperTradePanel";
 import DrawdownDashboard from "../components/DrawdownDashboard";
+import AlertPanel from "../components/AlertPanel";
 import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
 
 const PAGE_SIZE = 10;
@@ -37,6 +38,8 @@ export default function TradingPage() {
   const [newAccountName, setNewAccountName] = useState("");
   const [showDrawdownDashboard, setShowDrawdownDashboard] = useState(false);
   const [currentDrawdown, setCurrentDrawdown] = useState(0);
+  const [showAlertPanel, setShowAlertPanel] = useState(false);
+  const [unreadAlertCount, setUnreadAlertCount] = useState(0);
 
   // Similar memories for positions
   const [expandedPositionId, setExpandedPositionId] = useState<number | null>(null);
@@ -98,6 +101,18 @@ export default function TradingPage() {
     loadPortfolio();
     loadTrades();
   }, [currentAccountId]);
+
+  // Poll for unread alert count
+  useEffect(() => {
+    const updateUnreadCount = () => {
+      import('../services/NotificationService').then(({ NotificationService }) => {
+        setUnreadAlertCount(NotificationService.getUnacknowledgedCount());
+      });
+    };
+    updateUnreadCount();
+    const interval = setInterval(updateUnreadCount, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSymbolSearch = async (kw: string) => {
     setSymbol(kw);
@@ -313,6 +328,19 @@ export default function TradingPage() {
             title="管理账户"
           >
             <Settings2 size={14} />
+          </button>
+          {/* Alert Bell Button */}
+          <button
+            onClick={() => setShowAlertPanel(true)}
+            className="shrink-0 p-1.5 rounded-lg border border-border-color text-text-muted hover:text-accent-primary hover:border-accent-primary/40 transition-colors relative"
+            title="风险告警"
+          >
+            <Bell size={14} />
+            {unreadAlertCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent-danger text-white text-xs font-bold flex items-center justify-center">
+                {unreadAlertCount > 9 ? '9+' : unreadAlertCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -995,6 +1023,15 @@ export default function TradingPage() {
       {/* Drawdown Dashboard Modal */}
       {showDrawdownDashboard && (
         <DrawdownDashboard onClose={() => setShowDrawdownDashboard(false)} />
+      )}
+
+      {/* Alert Panel Modal */}
+      {showAlertPanel && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end p-4">
+          <div className="w-96 max-w-full">
+            <AlertPanel onClose={() => setShowAlertPanel(false)} />
+          </div>
+        </div>
       )}
 
       {/* Account Manager Modal */}

@@ -22,6 +22,7 @@ import { ExecutorAgent } from './ExecutorAgent';
 import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
 import { AgentConversationStore } from './AgentConversationStore';
 import { getPaperTradeEngine } from './PaperTradeEngine';
+import { NotificationService } from '../services/NotificationService';
 import type { Position, FactorScreenerResult } from '../types';
 
 export interface SupervisorConfig {
@@ -292,6 +293,35 @@ export const Supervisor = {
     // Set single backtestResult and riskResult for backward compatibility
     state.backtestResult = backtestMap.get(selectedCandidate.symbol);
     state.riskResult = riskMap.get(selectedCandidate.symbol);
+
+    // Send risk alert if trade was rejected by risk controller
+    if (state.riskResult?.approved === false) {
+      NotificationService.sendAlert({
+        level: 'critical',
+        title: '风控拒绝交易',
+        message: state.riskResult.reason || '风险检查未通过，交易被拒绝',
+        metadata: {
+          symbol: selectedCandidate.symbol,
+          reasonCode: state.riskResult.reasonCode?.code,
+        },
+      });
+    }
+
+    // Send warning if drawdown exceeds 1.5x threshold
+    if (state.riskResult?.drawdown !== undefined) {
+      const drawdownThreshold = config.maxDrawdownThreshold ?? -0.1;
+      if (state.riskResult.drawdown < drawdownThreshold * 1.5) {
+        NotificationService.sendAlert({
+          level: 'warning',
+          title: '回撤超限警告',
+          message: `当前回撤 ${(state.riskResult.drawdown * 100).toFixed(1)}% 超过阈值`,
+          metadata: {
+            drawdown: state.riskResult.drawdown,
+            threshold: drawdownThreshold,
+          },
+        });
+      }
+    }
 
     // Step 4: Executor
     let executorDuration = 0;
