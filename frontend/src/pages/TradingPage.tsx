@@ -18,6 +18,7 @@ import PaperTradePanel from "../components/PaperTradePanel";
 import DrawdownDashboard from "../components/DrawdownDashboard";
 import AlertPanel from "../components/AlertPanel";
 import SchedulerPanel from "../components/SchedulerPanel";
+import DebatePanel from "../components/DebatePanel";
 import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
 
 const PAGE_SIZE = 10;

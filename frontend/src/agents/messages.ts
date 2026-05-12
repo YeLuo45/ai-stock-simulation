@@ -3,7 +3,7 @@
  * Defines the message contract between agents in the multi-agent pipeline
  */
 
-export type AgentName = 'selector' | 'backtester' | 'risk' | 'executor';
+export type AgentName = 'selector' | 'backtester' | 'risk' | 'executor' | 'bull_debater' | 'bear_debater' | 'judge';
 export type AgentFrom = AgentName | 'supervisor';
 export type MessageType = 'request' | 'response' | 'error';
 export type MessageDestination = AgentName | 'supervisor' | 'broadcast';
@@ -133,6 +133,9 @@ export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
   backtester: '回测Agent',
   risk: '风控Agent',
   executor: '执行Agent',
+  bull_debater: '多方辩手',
+  bear_debater: '空方辩手',
+  judge: '裁判Agent',
 };
 
 export const AGENT_COLORS: Record<AgentName, string> = {
@@ -140,6 +143,9 @@ export const AGENT_COLORS: Record<AgentName, string> = {
   backtester: 'text-green-400',
   risk: 'text-yellow-400',
   executor: 'text-purple-400',
+  bull_debater: 'text-green-400',
+  bear_debater: 'text-red-400',
+  judge: 'text-cyan-400',
 };
 
 export const AGENT_BG_COLORS: Record<AgentName, string> = {
@@ -147,7 +153,34 @@ export const AGENT_BG_COLORS: Record<AgentName, string> = {
   backtester: 'bg-green-500',
   risk: 'bg-yellow-500',
   executor: 'bg-purple-500',
+  bull_debater: 'bg-green-500',
+  bear_debater: 'bg-red-500',
+  judge: 'bg-cyan-500',
 };
+
+// Debate types
+export interface Argument {
+  point: string;        // 论点文本
+  weight: number;       // 权重 0-1
+  evidence?: string;    // 支撑证据
+}
+
+export interface DebateRound {
+  stockCode: string;
+  round: number;
+  bullArguments: Argument[];
+  bearArguments: Argument[];
+  judgeVerdict: JudgeVerdict;
+  timestamp: number;
+}
+
+export interface JudgeVerdict {
+  decision: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;   // 0-1
+  bullScore: number;
+  bearScore: number;
+  reasoning: string;
+}
 
 // Paper Trade types
 export interface PaperTradeSnapshot {

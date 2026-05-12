@@ -4,6 +4,7 @@
  */
 
 import type { AgentName } from './messages';
+import type { DebateRound } from './messages';
 
 export interface ConversationTurn {
   role: 'system' | 'user' | 'assistant';
@@ -87,6 +88,7 @@ interface MemoryStats {
 const STORAGE_KEY = 'agent_memories';
 const MAX_MEMORIES = 500;
 const OUTCOME_QUEUE_KEY = 'agent_outcome_queue';
+const DEBATE_HISTORY_KEY = 'agent_debate_history';
 
 export interface OutcomeQueueItem {
   memoryId: string;
@@ -449,4 +451,33 @@ export function exportMemories(): AgentMemory[] {
 export function importMemories(memories: AgentMemory[]): void {
   const valid = memories.filter(m => m.id && m.sessionId && m.timestamp && m.agents);
   saveAllMemories(valid.slice(0, MAX_MEMORIES));
+}
+
+// ============ Debate History Storage ============
+
+export function getDebateHistory(): any[] {
+  try {
+    const raw = localStorage.getItem(DEBATE_HISTORY_KEY);
+    if (!raw) return [];
+    const history = JSON.parse(raw);
+    return Array.isArray(history) ? history : [];
+  } catch {
+    return [];
+  }
+}
+
+export function appendDebateHistory(debateRound: DebateRound): void {
+  try {
+    const history = getDebateHistory();
+    history.unshift(debateRound);
+    // Keep only last 100 debates
+    const trimmed = history.slice(0, 100);
+    localStorage.setItem(DEBATE_HISTORY_KEY, JSON.stringify(trimmed));
+  } catch (err) {
+    console.warn('Failed to save debate history:', err);
+  }
+}
+
+export function clearDebateHistory(): void {
+  localStorage.removeItem(DEBATE_HISTORY_KEY);
 }
