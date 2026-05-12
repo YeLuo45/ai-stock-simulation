@@ -17,6 +17,7 @@ import { ChevronDown, ChevronUp, Bot, Activity } from 'lucide-react';
 import type { AgentMetadata, PipelineLogEntry, AgentName } from './messages';
 import { AGENT_DISPLAY_NAMES, AGENT_COLORS, AGENT_BG_COLORS } from './messages';
 import { getAgentMetadata, getPipelineLogs } from './agentStorage';
+import PipelineTimeline from '../components/PipelineTimeline';
 
 interface AgentCardData {
   name: AgentName;
@@ -236,6 +237,11 @@ export default function AgentMonitor() {
           <span className="text-xs text-text-muted font-medium">管道延迟 (最近5次)</span>
         </div>
         <PipelineLatencyChart latencies={latencies} />
+      </div>
+
+      {/* Pipeline Timeline Visualization */}
+      <div className="px-4 pb-4">
+        <PipelineTimeline />
       </div>
 
       {/* Pipeline Logs */}
