@@ -8,8 +8,8 @@ import { screenFactors } from '../services/factorEngine';
 import type { AgentMessage, AgentName, SelectedSignal } from './messages';
 import { createAgentMessage } from './messages';
 import type { FactorWeight, FactorScreenerResult } from '../types';
-import { hasApiKey, callWithJSONPrompt, saveAgentLLMOutput, getAgentSession } from './MiniMaxAgentService';
-import { buildContextSummary } from './AgentSession';
+import { hasApiKey, callWithJSONPrompt } from './MiniMaxAgentService';
+import { buildContextSummary, saveAgentLLMOutput, getAgentSession } from './AgentSession';
 
 export interface SelectorPayload {
   candidates: string[];

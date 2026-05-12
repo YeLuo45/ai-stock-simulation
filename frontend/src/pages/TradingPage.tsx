@@ -10,13 +10,14 @@ import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } f
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
 import type { MemoryEntry } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield, Bell } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield, Bell, Zap } from "lucide-react";
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
 import PaperTradePanel from "../components/PaperTradePanel";
 import DrawdownDashboard from "../components/DrawdownDashboard";
 import AlertPanel from "../components/AlertPanel";
+import SchedulerPanel from "../components/SchedulerPanel";
 import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
 
 const PAGE_SIZE = 10;
@@ -24,7 +25,7 @@ const PAGE_SIZE = 10;
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const brokerState = useBrokerStore();
-  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper">("positions");
+  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper" | "automation">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -1048,6 +1049,7 @@ export default function TradingPage() {
             { key: "memory" as const, label: "记忆", icon: <Brain size={14} /> },
             { key: "analytics" as const, label: "分析", icon: <BarChart3 size={14} /> },
             { key: "paper" as const, label: "模拟", icon: <BarChart3 size={14} /> },
+            { key: "automation" as const, label: "自动化", icon: <Zap size={14} /> },
           ]).map(tabItem => (
             <button
               key={tabItem.key}
@@ -1073,6 +1075,7 @@ export default function TradingPage() {
           {tab === "memory" && <MemoryReviewPage />}
           {tab === "analytics" && <PositionAnalyticsPanel />}
           {tab === "paper" && <PaperTradePanel />}
+          {tab === "automation" && <SchedulerPanel />}
         </div>
       </div>
     </div>
