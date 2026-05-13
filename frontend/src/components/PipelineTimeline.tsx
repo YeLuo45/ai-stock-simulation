@@ -24,6 +24,11 @@ const COLORS: Record<string, string> = {
   backtester: '#22c55e', // green-500
   risk: '#eab308',       // yellow-500
   executor: '#a855f7',   // purple-500
+  research: '#06b6d4',    // cyan-500
+  bull: '#22c55e',       // green-500
+  bear: '#ef4444',       // red-500
+  judge: '#8b5cf6',      // violet-500
+  news: '#f97316',       // orange-500
 };
 
 interface AgentRunData {
@@ -205,7 +210,7 @@ interface PassRateData {
 }
 
 function calculatePassRates(logs: PipelineLogEntry[]): PassRateData[] {
-  const agentNames: AgentName[] = ['selector', 'backtester', 'risk', 'executor'];
+  const agentNames: AgentName[] = ['selector', 'backtester', 'risk', 'executor', 'research', 'bull', 'bear', 'judge', 'news'];
 
   return agentNames.map(agent => {
     // Filter logs for this agent with success/error status
@@ -284,7 +289,7 @@ function PassRateCards() {
         <CheckCircle size={14} className="text-gray-400" />
         <span className="text-sm font-medium text-gray-300">通过率统计</span>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {passRates.map(pr => (
           <PassRateCard key={pr.agent} data={pr} />
         ))}
@@ -440,7 +445,7 @@ export default function PipelineTimeline({ currentRun }: PipelineTimelineProps) 
     }
 
     // Fallback: build from agent metadata
-    const agentNames: AgentName[] = ['selector', 'backtester', 'risk', 'executor'];
+    const agentNames: AgentName[] = ['selector', 'backtester', 'risk', 'executor', 'research', 'bull', 'bear', 'judge', 'news'];
     return agentNames.map(name => {
       const metadata = getAgentMetadata(name);
       return {

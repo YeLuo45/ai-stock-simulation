@@ -179,19 +179,16 @@ function LogEntryRow({ entry }: { entry: PipelineLogEntry }) {
 }
 
 export default function AgentMonitor() {
-  const [agents, setAgents] = useState<AgentCardData[]>([
-    { name: 'selector', metadata: null },
-    { name: 'backtester', metadata: null },
-    { name: 'risk', metadata: null },
-    { name: 'executor', metadata: null },
-  ]);
+  const ALL_AGENTS: AgentName[] = ['selector', 'backtester', 'risk', 'executor', 'research', 'bull', 'bear', 'judge', 'news'];
+  const [agents, setAgents] = useState<AgentCardData[]>(
+    ALL_AGENTS.map(name => ({ name, metadata: null }))
+  );
   const [logs, setLogs] = useState<PipelineLogEntry[]>([]);
   const [latencies, setLatencies] = useState<{ index: number; latency: number }[]>([]);
   const [logsExpanded, setLogsExpanded] = useState(false);
 
   const refreshData = useCallback(() => {
-    const agentNames: AgentName[] = ['selector', 'backtester', 'risk', 'executor'];
-    const updated = agentNames.map(name => ({
+    const updated = ALL_AGENTS.map(name => ({
       name,
       metadata: getAgentMetadata(name),
     }));
