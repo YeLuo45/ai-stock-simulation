@@ -3,7 +3,7 @@
  * Defines the message contract between agents in the multi-agent pipeline
  */
 
-export type AgentName = 'selector' | 'backtester' | 'risk' | 'executor' | 'bull_debater' | 'bear_debater' | 'judge';
+export type AgentName = 'selector' | 'backtester' | 'risk' | 'executor' | 'bull_debater' | 'bear_debater' | 'judge' | 'research' | 'bull' | 'bear' | 'news';
 export type AgentFrom = AgentName | 'supervisor';
 export type MessageType = 'request' | 'response' | 'error';
 export type MessageDestination = AgentName | 'supervisor' | 'broadcast';
@@ -128,7 +128,7 @@ export function createTraceId(): string {
 }
 
 // Agent status helpers
-export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
+export const AGENT_DISPLAY_NAMES: Record<string, string> = {
   selector: '选股Agent',
   backtester: '回测Agent',
   risk: '风控Agent',
@@ -136,9 +136,13 @@ export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
   bull_debater: '多方辩手',
   bear_debater: '空方辩手',
   judge: '裁判Agent',
+  research: '研究Agent',
+  bull: '多方辩手',
+  bear: '空方辩手',
+  news: '新闻Agent',
 };
 
-export const AGENT_COLORS: Record<AgentName, string> = {
+export const AGENT_COLORS: Record<string, string> = {
   selector: 'text-blue-400',
   backtester: 'text-green-400',
   risk: 'text-yellow-400',
@@ -146,9 +150,13 @@ export const AGENT_COLORS: Record<AgentName, string> = {
   bull_debater: 'text-green-400',
   bear_debater: 'text-red-400',
   judge: 'text-cyan-400',
+  research: 'text-blue-400',
+  bull: 'text-green-400',
+  bear: 'text-red-400',
+  news: 'text-orange-400',
 };
 
-export const AGENT_BG_COLORS: Record<AgentName, string> = {
+export const AGENT_BG_COLORS: Record<string, string> = {
   selector: 'bg-blue-500',
   backtester: 'bg-green-500',
   risk: 'bg-yellow-500',
@@ -156,6 +164,10 @@ export const AGENT_BG_COLORS: Record<AgentName, string> = {
   bull_debater: 'bg-green-500',
   bear_debater: 'bg-red-500',
   judge: 'bg-cyan-500',
+  research: 'bg-blue-500',
+  bull: 'bg-green-500',
+  bear: 'bg-red-500',
+  news: 'bg-orange-500',
 };
 
 // Debate types

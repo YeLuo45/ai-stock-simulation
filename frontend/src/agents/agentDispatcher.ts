@@ -10,30 +10,51 @@ import { SelectorAgent } from './SelectorAgent';
 import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
+import { DataResearcherAgent } from './DataResearcherAgent';
+import { BullDebaterAgent } from './BullDebaterAgent';
+import { BearDebaterAgent } from './BearDebaterAgent';
+import { JudgeAgent } from './JudgeAgent';
+import { newsResearcherAgent } from './NewsResearcherAgent';
 
 export type AgentProcessor = (message: AgentMessage) => Promise<AgentMessage>;
 
-const AGENT_PROCESSORS: Record<AgentName, AgentProcessor> = {
+// Adapter for DataResearcherAgent (class-based)
+const researchAdapter: AgentProcessor = async (msg: AgentMessage) => {
+  const agent = DataResearcherAgent.getInstance();
+  const payload = msg.payload as { stockCode: string; dataTypes?: string[] };
+  const result = await agent.research(payload.stockCode, payload.dataTypes as any);
+  return createAgentMessage('research', msg.from as AgentName, 'response', result, msg.traceId);
+};
+
+// Adapter for NewsResearcherAgent (class-based)
+const newsAdapter: AgentProcessor = async (msg: AgentMessage) => {
+  const payload = msg.payload as { stockCode: string; keyword?: string };
+  const result = await newsResearcherAgent.research(payload.stockCode, payload.keyword);
+  return createAgentMessage('news', msg.from as AgentName, 'response', result, msg.traceId);
+};
+
+const AGENT_PROCESSORS: Record<string, AgentProcessor> = {
   selector: async (msg: AgentMessage) => SelectorAgent.process(msg),
   backtester: async (msg: AgentMessage) => BacktesterAgent.process(msg),
   risk: async (msg: AgentMessage) => RiskControllerAgent.process(msg),
   executor: async (msg: AgentMessage) => ExecutorAgent.process(msg),
+  research: researchAdapter,
+  bull: async (msg: AgentMessage) => BullDebaterAgent.process(msg),
+  bear: async (msg: AgentMessage) => BearDebaterAgent.process(msg),
+  judge: async (msg: AgentMessage) => JudgeAgent.process(msg),
+  news: newsAdapter,
+  // Aliases for bull_debater/bear_debater
+  bull_debater: async (msg: AgentMessage) => BullDebaterAgent.process(msg),
+  bear_debater: async (msg: AgentMessage) => BearDebaterAgent.process(msg),
 };
 
 /**
  * Dispatch a message to the appropriate agent via MessageBus
  */
 export async function dispatch(message: AgentMessage): Promise<AgentMessage> {
-  // Subscribe handler for response
-  const handler = (msg: AgentMessage) => {
-    if (msg.type === 'response' || msg.type === 'error') {
-      // Response handled
-    }
-  };
-
   // If broadcast, dispatch to all agents
   if (message.to === 'broadcast') {
-    const agents: AgentName[] = ['selector', 'backtester', 'risk', 'executor'];
+    const agents: AgentName[] = ['selector', 'backtester', 'risk', 'executor', 'research', 'bull', 'bear', 'judge', 'news'];
     let lastResult: AgentMessage = message;
     for (const agent of agents) {
       const broadcastMsg = { ...message, to: agent } as AgentMessage;
@@ -42,7 +63,7 @@ export async function dispatch(message: AgentMessage): Promise<AgentMessage> {
     return lastResult;
   }
 
-  const processor = AGENT_PROCESSORS[message.to as AgentName];
+  const processor = AGENT_PROCESSORS[message.to as string];
   if (!processor) {
     const errorMsg = createAgentMessage(
       'supervisor',
@@ -93,7 +114,7 @@ export function dispatchAsync(message: AgentMessage): void {
  * Register an agent with the dispatcher
  */
 export function registerAgent(name: AgentName, processor: AgentProcessor): void {
-  (AGENT_PROCESSORS as Record<string, AgentProcessor>)[name] = processor;
+  AGENT_PROCESSORS[name] = processor;
 }
 
 /**
