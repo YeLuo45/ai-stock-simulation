@@ -19,11 +19,13 @@ import { SelectorAgent } from './SelectorAgent';
 import { BacktesterAgent } from './BacktesterAgent';
 import { RiskControllerAgent } from './RiskControllerAgent';
 import { ExecutorAgent } from './ExecutorAgent';
+import { DataResearcherAgent } from './DataResearcherAgent';
 import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
 import { AgentConversationStore } from './AgentConversationStore';
 import { getPaperTradeEngine } from './PaperTradeEngine';
 import { NotificationService } from '../services/NotificationService';
 import type { Position, FactorScreenerResult } from '../types';
+import type { ResearchResult } from '../types/DataSource';
 
 export interface SupervisorConfig {
   candidates: string[];
