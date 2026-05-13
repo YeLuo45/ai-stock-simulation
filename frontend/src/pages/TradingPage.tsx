@@ -10,7 +10,7 @@ import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } f
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
 import type { MemoryEntry } from "../types";
-import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield, Bell, Zap } from "lucide-react";
+import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield, Bell, Zap, Activity } from "lucide-react";
 import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
@@ -20,14 +20,45 @@ import AlertPanel from "../components/AlertPanel";
 import SchedulerPanel from "../components/SchedulerPanel";
 import DebatePanel from "../components/DebatePanel";
 import PromptStrategyPanel from "../components/PromptStrategyPanel";
+import StateTransitionPanel from "../components/StateTransitionPanel";
 import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
 
 const PAGE_SIZE = 10;
 
+// Wrapper component for StateTransitionPanel that connects to MessageBus
+function StateTransitionPanelWrapper() {
+  const [state, setState] = useState<ReturnType<typeof import('../agents/MessageBus').messageBus.getState>>(null);
+  const [messages, setMessages] = useState<import('../types/AgentMessage').AgentMessage[]>([]);
+
+  useEffect(() => {
+    // Get latest conversation ID from localStorage or use default
+    const latestTraceId = localStorage.getItem('latest_trace_id') || 'default';
+
+    // Subscribe to message bus updates
+    const interval = setInterval(() => {
+      const { messageBus } = require('../agents/MessageBus');
+      const currentState = messageBus.getState(latestTraceId);
+      const currentMessages = messageBus.getMessages(latestTraceId);
+      setState(currentState);
+      setMessages(currentMessages);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <StateTransitionPanel
+      conversationId={localStorage.getItem('latest_trace_id') || 'default'}
+      state={state}
+      messages={messages}
+    />
+  );
+}
+
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const brokerState = useBrokerStore();
-  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper" | "automation" | "prompt">("positions");
+  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper" | "automation" | "prompt" | "status">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -1053,6 +1084,7 @@ export default function TradingPage() {
             { key: "paper" as const, label: "模拟", icon: <BarChart3 size={14} /> },
             { key: "automation" as const, label: "自动化", icon: <Zap size={14} /> },
             { key: "prompt" as const, label: "Prompt策略", icon: <Settings2 size={14} /> },
+            { key: "status" as const, label: "状态", icon: <Activity size={14} /> },
           ]).map(tabItem => (
             <button
               key={tabItem.key}
@@ -1080,6 +1112,7 @@ export default function TradingPage() {
           {tab === "paper" && <PaperTradePanel />}
           {tab === "automation" && <SchedulerPanel />}
           {tab === "prompt" && <PromptStrategyPanel />}
+          {tab === "status" && <StateTransitionPanelWrapper />}
         </div>
       </div>
     </div>

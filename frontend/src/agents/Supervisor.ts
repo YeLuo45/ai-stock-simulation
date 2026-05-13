@@ -1,6 +1,7 @@
 /**
  * Supervisor - Main Pipeline Orchestrator
  * Runs the complete pipeline: Selector → Backtester (parallel) → Risk Controller (parallel) → Executor
+ * Uses MessageBus for inter-agent communication
  */
 
 import type {
@@ -24,6 +25,8 @@ import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
 import { AgentConversationStore } from './AgentConversationStore';
 import { getPaperTradeEngine } from './PaperTradeEngine';
 import { NotificationService } from '../services/NotificationService';
+import { messageBus } from './MessageBus';
+import { Phase } from '../types/AgentState';
 import type { Position, FactorScreenerResult } from '../types';
 import type { ResearchResult } from '../types/DataSource';
 
@@ -68,6 +71,10 @@ export const Supervisor = {
     const traceId = createTraceId();
     const cycleStartTime = Date.now();
     const maxCandidates = config.maxCandidates || 5;
+
+    // Initialize MessageBus conversation state
+    messageBus.createConversation(traceId, ['supervisor', 'selector', 'backtester', 'risk', 'executor']);
+    messageBus.transitionPhase(traceId, Phase.DATA_RESEARCH);
 
     const state: PipelineState = {
       traceId,
@@ -134,14 +141,20 @@ export const Supervisor = {
       updateAgentRun('selector', 'error', selectorDuration, errorMsg);
       state.errors.push({ agent: 'selector', message: errorMsg, timestamp: Date.now() });
       logPipelineEntry(traceId, 'selector', 'select', selectorDuration, `Error: ${errorMsg}`);
+      messageBus.setError(traceId, errorMsg);
+      messageBus.transitionPhase(traceId, Phase.FAILED);
     }
 
     if (selectorCandidates.length === 0) {
       state.endTime = Date.now();
       savePipelineState(state);
       clearAgentSession(traceId);
+      messageBus.transitionPhase(traceId, Phase.COMPLETED);
       return { state, logs: [] };
     }
+
+    // Transition to ANALYSIS phase
+    messageBus.transitionPhase(traceId, Phase.ANALYSIS);
 
     // Take top N candidates for parallel processing
     const topCandidates = selectorCandidates.slice(0, maxCandidates);
@@ -277,12 +290,16 @@ export const Supervisor = {
       state.endTime = Date.now();
       savePipelineState(state);
       clearAgentSession(traceId);
+      messageBus.transitionPhase(traceId, Phase.COMPLETED);
       return { state, logs: [] };
     }
 
     // Select best candidate by selector score (composite_score)
     validCandidates.sort((a, b) => b.composite_score - a.composite_score);
     const selectedCandidate = validCandidates[0];
+
+    // Transition to EXECUTION phase
+    messageBus.transitionPhase(traceId, Phase.EXECUTION);
 
     state.selectedSignal = {
       symbol: selectedCandidate.symbol,
@@ -405,6 +422,14 @@ export const Supervisor = {
 
     state.endTime = Date.now();
     savePipelineState(state);
+
+    // Finalize with COMPLETED phase
+    if (state.errors.length > 0) {
+      messageBus.setError(traceId, `Pipeline completed with ${state.errors.length} error(s)`);
+      messageBus.transitionPhase(traceId, Phase.FAILED);
+    } else {
+      messageBus.transitionPhase(traceId, Phase.COMPLETED);
+    }
 
     const totalDuration = state.endTime - cycleStartTime;
     logPipelineEntry(

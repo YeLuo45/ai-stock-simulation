@@ -1,5 +1,9 @@
 // Shared types for the AI Stock Simulation frontend
 
+// Re-export Agent types
+export * from './AgentMessage';
+export * from './AgentState';
+
 export interface StockInfo {
   symbol: string;
   name: string;
