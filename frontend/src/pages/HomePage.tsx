@@ -92,22 +92,15 @@ export default function HomePage() {
     };
   }, [priceAlerts, triggerAlert]);
 
-  if (isLoading && !portfolio) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={32} className="animate-spin text-accent-primary" />
-      </div>
-    )
-  }
-
   const positions = portfolio?.positions ?? []
   const totalValue = portfolio?.total_assets ?? 1000000
   const profitLoss = portfolio?.total_profit_loss ?? 0
   const profitLossPct = portfolio?.total_profit_loss_pct ?? 0
 
+  // Risk metrics calculation - must be before early return to follow Rules of Hooks
   useEffect(() => {
     if (!portfolio || positions.length === 0) return;
-    
+
     const calculateRisk = async () => {
       setRiskMetrics(prev => ({ ...prev, loading: true }));
       
