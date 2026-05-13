@@ -15,6 +15,7 @@ import clsx from "clsx";
 import MemoryReviewPage from "./MemoryReviewPage";
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
 import PaperTradePanel from "../components/PaperTradePanel";
+import PortfolioManagerPanel from "../components/PortfolioManagerPanel";
 import DrawdownDashboard from "../components/DrawdownDashboard";
 import AlertPanel from "../components/AlertPanel";
 import SchedulerPanel from "../components/SchedulerPanel";
@@ -58,7 +59,7 @@ function StateTransitionPanelWrapper() {
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const brokerState = useBrokerStore();
-  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper" | "automation" | "prompt" | "status">("positions");
+  const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper" | "automation" | "prompt" | "status" | "portfolio">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [tradeType, setTradeType] = useState<"buy" | "sell">("buy");
@@ -1085,6 +1086,7 @@ export default function TradingPage() {
             { key: "automation" as const, label: "自动化", icon: <Zap size={14} /> },
             { key: "prompt" as const, label: "Prompt策略", icon: <Settings2 size={14} /> },
             { key: "status" as const, label: "状态", icon: <Activity size={14} /> },
+            { key: "portfolio" as const, label: "组合", icon: <BarChart3 size={14} /> },
           ]).map(tabItem => (
             <button
               key={tabItem.key}
@@ -1113,6 +1115,7 @@ export default function TradingPage() {
           {tab === "automation" && <SchedulerPanel />}
           {tab === "prompt" && <PromptStrategyPanel />}
           {tab === "status" && <StateTransitionPanelWrapper />}
+          {tab === "portfolio" && <PortfolioManagerPanel />}
         </div>
       </div>
     </div>

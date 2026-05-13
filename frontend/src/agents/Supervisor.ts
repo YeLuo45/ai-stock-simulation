@@ -29,6 +29,14 @@ import { messageBus } from './MessageBus';
 import { Phase } from '../types/AgentState';
 import type { Position, FactorScreenerResult } from '../types';
 import type { ResearchResult } from '../types/DataSource';
+import {
+  PortfolioManagerAgent,
+  rebalance,
+  fromPaperPositions,
+  getDefaultRiskLimits,
+  type RebalanceDirective,
+  type TargetPosition,
+} from './PortfolioManagerAgent';
 
 export interface SupervisorConfig {
   candidates: string[];
@@ -312,6 +320,90 @@ export const Supervisor = {
     // Set single backtestResult and riskResult for backward compatibility
     state.backtestResult = backtestMap.get(selectedCandidate.symbol);
     state.riskResult = riskMap.get(selectedCandidate.symbol);
+
+    // Step 3.6: Portfolio Manager - Rebalancing & Risk Enforcement
+    // Get current portfolio state from PaperTradeEngine and apply Kelly Criterion
+    let rebalanceDirectives: RebalanceDirective[] = [];
+    try {
+      const engine = getPaperTradeEngine();
+      const snap = engine.getSnapshot(traceId);
+      const totalValue = snap.balance + snap.positions.reduce((sum, p) => sum + p.marketValue, 0);
+      const paperPositions = snap.positions;
+      
+      // Build current portfolio state
+      const portfolioState = fromPaperPositions(
+        paperPositions,
+        snap.balance,
+        totalValue
+      );
+      
+      // Build target positions from selected signal and confidence
+      const targetPositions: TargetPosition[] = [{
+        code: selectedCandidate.symbol,
+        weight: 20, // Target 20% weight by default (will be adjusted by Kelly)
+        confidence: selectedCandidate.composite_score,
+        action: 'BUY',
+      }];
+      
+      // Get risk limits (use defaults or from config)
+      const riskLimits = getDefaultRiskLimits();
+      
+      // Run rebalancing
+      const rebalanceResult = rebalance(
+        targetPositions,
+        portfolioState,
+        riskLimits,
+        'PAPER'
+      );
+      
+      rebalanceDirectives = rebalanceResult.directives;
+      
+      // Log rebalance results
+      logPipelineEntry(
+        traceId,
+        'supervisor',
+        'portfolio_rebalance',
+        0,
+        `Portfolio manager: ${rebalanceDirectives.length} directives generated. Risk passed: ${rebalanceResult.riskResult.passed}`
+      );
+      
+      // Send alerts for risk violations
+      if (!rebalanceResult.riskResult.passed) {
+        for (const violation of rebalanceResult.riskResult.violations) {
+          NotificationService.sendAlert({
+            level: 'critical',
+            title: '组合风控拦截',
+            message: violation,
+            metadata: { traceId },
+          });
+        }
+      }
+      
+      // Execute rebalance directives for PAPER mode - write directly to PaperTradeEngine
+      for (const directive of rebalanceDirectives) {
+        if (directive.urgency === 'HIGH') {
+          // High urgency directives get executed immediately in paper mode
+          engine.openOrder(
+            directive.code,
+            directive.name,
+            directive.action === 'CLEAR' ? 'sell' : directive.action.toLowerCase() as 'buy' | 'sell',
+            directive.shares,
+            directive.price,
+            `${traceId}-rebalance`
+          );
+          logPipelineEntry(
+            traceId,
+            'supervisor',
+            'rebalance_execute',
+            0,
+            `${directive.action} ${directive.shares} ${directive.code} @ ${directive.price}`
+          );
+        }
+      }
+    } catch (pmErr) {
+      console.warn('[PortfolioManager] Rebalance error:', pmErr);
+      logPipelineEntry(traceId, 'supervisor', 'portfolio_rebalance', 0, `Error: ${pmErr instanceof Error ? pmErr.message : 'Unknown error'}`);
+    }
 
     // Send risk alert if trade was rejected by risk controller
     if (state.riskResult?.approved === false) {
