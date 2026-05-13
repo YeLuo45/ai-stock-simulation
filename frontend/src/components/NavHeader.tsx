@@ -1,7 +1,7 @@
 import { useStore } from '../store'
 import { getPortfolio } from '../services/api'
 import { useState, useEffect } from 'react'
-import { TrendingUp, Bot, Wallet, Settings } from 'lucide-react'
+import { TrendingUp, Bot, Wallet, Settings, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 import type { Page } from '../types'
 
