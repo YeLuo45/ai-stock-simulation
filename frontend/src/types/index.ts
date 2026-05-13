@@ -192,6 +192,9 @@ export interface AIModelConfig {
 
 export type Page = "home" | "selection" | "backtest" | "trading" | "analysis" | "settings" | "ipo" | "stockpool" | "optimize" | "strategybuilder" | "market" | "capitalflow" | "contest" | "portfolio_optimizer" | "evolution" | "memory" | "factor_editor" | "strategy_market" | "backtest_compare";
 
+export type SelectionTab = 'selection' | 'backtest' | 'backtest_compare' | 'optimize' | 'portfolio_optimizer' | 'evolution' | 'factor_editor' | 'strategybuilder';
+export type TradingTab = 'trading' | 'ipo' | 'contest' | 'capitalflow' | 'stockpool' | 'memory';
+
 // ============== Stock Pool ==============
 
 export interface StockPool {

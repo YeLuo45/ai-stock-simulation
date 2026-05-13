@@ -3,16 +3,23 @@
  * Cyberpunk Terminal Theme
  * Multi-Account Support
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useStore } from "../store";
 import { useBrokerStore } from "../store";
 import { resetPortfolio, searchStocks, getPortfolio, executeTrade, getTrades } from "../services/api";
 import { findSimilarMemories } from "../services/memoryService";
 import type { StockInfo } from "../types";
 import type { MemoryEntry } from "../types";
+import type { TradingTab } from "../types";
 import { Search, RefreshCw, Trash2, TrendingUp, TrendingDown, Wallet, History, Briefcase, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Plus, Settings2, X, Check, Brain, BarChart3, Shield, Bell, Zap, Activity } from "lucide-react";
 import clsx from "clsx";
-import MemoryReviewPage from "./MemoryReviewPage";
+
+// Lazy load sub-pages
+const IPOEvaluationPage = lazy(() => import('./IPOEvaluationPage'))
+const ContestPage = lazy(() => import('./ContestPage'))
+const CapitalFlowPage = lazy(() => import('./CapitalFlowPage'))
+const StockPoolPage = lazy(() => import('./StockPoolPage'))
+const MemoryReviewPage = lazy(() => import('./MemoryReviewPage'))
 import PositionAnalyticsPanel from "../components/PositionAnalyticsPanel";
 import PaperTradePanel from "../components/PaperTradePanel";
 import PortfolioManagerPanel from "../components/PortfolioManagerPanel";
@@ -59,6 +66,11 @@ function StateTransitionPanelWrapper() {
 export default function TradingPage() {
   const { portfolio, setPortfolio, trades, setTrades, showNotification, accounts, currentAccountId, setCurrentAccountId, addAccount, deleteAccount, renameAccount, appliedStrategy, strategyParams, clearStrategy } = useStore();
   const brokerState = useBrokerStore();
+
+  // Trading sub-tab navigation (top-level tabs)
+  const [tradingTab, setTradingTab] = useState<TradingTab>('trading');
+
+  // Internal tab state for "trading" section
   const [tab, setTab] = useState<"positions" | "trade" | "history" | "memory" | "analytics" | "paper" | "automation" | "prompt" | "status" | "portfolio">("positions");
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
@@ -83,6 +95,16 @@ export default function TradingPage() {
   // History tab filters & pagination
   const [historyFilter, setHistoryFilter] = useState<"all" | "buy" | "sell">("all");
   const [historyPage, setHistoryPage] = useState(1);
+
+  // Trading sub-tabs mapping
+  const tradingTabs: { key: TradingTab; label: string }[] = [
+    { key: 'trading', label: '交易' },
+    { key: 'ipo', label: '新股评估' },
+    { key: 'contest', label: '竞赛' },
+    { key: 'capitalflow', label: '资金流向' },
+    { key: 'stockpool', label: '股票池' },
+    { key: 'memory', label: '记忆库' },
+  ];
 
   const loadPortfolio = async () => {
     if (!currentAccountId) return;
@@ -1010,114 +1032,179 @@ export default function TradingPage() {
     );
   };
 
+  // ============ Render Sub Page Content ============
+  const renderTradingContent = () => {
+    // When tradingTab is not 'trading', render the corresponding page
+    if (tradingTab !== 'trading') {
+      switch (tradingTab) {
+        case 'ipo':
+          return <IPOEvaluationPage />;
+        case 'contest':
+          return <ContestPage />;
+        case 'capitalflow':
+          return <CapitalFlowPage />;
+        case 'stockpool':
+          return <StockPoolPage />;
+        case 'memory':
+          return <MemoryReviewPage />;
+        default:
+          return null;
+      }
+    }
+
+    // tradingTab === 'trading' - show the existing trading interface
+    return (
+      <>
+        {/* Drawdown Alert Bar */}
+        <div className="flex items-center justify-between bg-bg-secondary border border-border-color rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg",
+              currentDrawdown <= -0.2
+                ? "bg-red-500/10 border border-red-500/30"
+                : currentDrawdown <= -0.1
+                ? "bg-yellow-500/10 border border-yellow-500/30"
+                : "bg-blue-500/10 border border-blue-500/30"
+            )}>
+              <TrendingDown size={14} className={
+                currentDrawdown <= -0.2
+                  ? "text-red-400"
+                  : currentDrawdown <= -0.1
+                  ? "text-yellow-400"
+                  : "text-blue-400"
+              } />
+              <span className="text-xs text-text-muted">当前回撤</span>
+              <span className={clsx(
+                "font-mono font-bold text-sm",
+                currentDrawdown <= -0.2
+                  ? "text-red-400"
+                  : currentDrawdown <= -0.1
+                  ? "text-yellow-400"
+                  : "text-blue-400"
+              )}>
+                {currentDrawdown === 0 ? "--" : `${(currentDrawdown * 100).toFixed(2)}%`}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowDrawdownDashboard(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary/10 border border-accent-primary/30 text-accent-primary hover:bg-accent-primary/20 transition-colors text-sm font-medium"
+          >
+            <Shield size={14} />
+            风控面板
+          </button>
+        </div>
+
+        {/* Drawdown Dashboard Modal */}
+        {showDrawdownDashboard && (
+          <DrawdownDashboard onClose={() => setShowDrawdownDashboard(false)} />
+        )}
+
+        {/* Alert Panel Modal */}
+        {showAlertPanel && (
+          <div className="fixed inset-0 z-50 flex items-start justify-end p-4">
+            <div className="w-96 max-w-full">
+              <AlertPanel onClose={() => setShowAlertPanel(false)} />
+            </div>
+          </div>
+        )}
+
+        {/* Account Manager Modal */}
+        {renderAccountManager()}
+
+        {/* Main Panel */}
+        <div className="bg-bg-secondary border border-border-color rounded-2xl overflow-hidden">
+          {/* Tab Bar */}
+          <div className="flex overflow-x-auto scrollbar-hide border-b border-border-color">
+            {([
+              { key: "positions" as const, label: "持仓", icon: <Briefcase size={14} /> },
+              { key: "trade" as const, label: "交易", icon: <ArrowUpDown size={14} /> },
+              { key: "history" as const, label: "历史", icon: <History size={14} /> },
+              { key: "memory" as const, label: "记忆", icon: <Brain size={14} /> },
+              { key: "analytics" as const, label: "分析", icon: <BarChart3 size={14} /> },
+              { key: "paper" as const, label: "模拟", icon: <BarChart3 size={14} /> },
+              { key: "automation" as const, label: "自动化", icon: <Zap size={14} /> },
+              { key: "prompt" as const, label: "Prompt策略", icon: <Settings2 size={14} /> },
+              { key: "status" as const, label: "状态", icon: <Activity size={14} /> },
+              { key: "portfolio" as const, label: "组合", icon: <BarChart3 size={14} /> },
+            ]).map(tabItem => (
+              <button
+                key={tabItem.key}
+                onClick={() => setTab(tabItem.key)}
+                className={clsx(
+                  "flex items-center gap-2 px-6 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap",
+                  tab === tabItem.key
+                    ? "border-accent-primary text-accent-primary bg-accent-primary/5"
+                    : "border-transparent text-text-muted hover:text-text-secondary hover:bg-bg-tertiary/30"
+                )}
+              >
+                {tabItem.icon}
+                {tabItem.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div>
+            {tab === "positions" && renderPositions()}
+            {tab === "trade" && renderTradeForm()}
+            {tab === "history" && renderHistory()}
+            {tab === "memory" && <MemoryReviewPage />}
+            {tab === "analytics" && <PositionAnalyticsPanel />}
+            {tab === "paper" && <PaperTradePanel />}
+            {tab === "automation" && <SchedulerPanel />}
+            {tab === "prompt" && <PromptStrategyPanel />}
+            {tab === "status" && <StateTransitionPanelWrapper />}
+            {tab === "portfolio" && <PortfolioManagerPanel />}
+          </div>
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-lg bg-accent-primary/20 flex items-center justify-center">
+          <Wallet size={22} className="text-accent-primary" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">交易</h1>
+          <p className="text-text-muted text-sm">股票交易与投资组合管理</p>
+        </div>
+      </div>
+
       {/* Account Cards */}
       {renderAccountCard()}
 
-      {/* Drawdown Alert Bar */}
-      <div className="flex items-center justify-between bg-bg-secondary border border-border-color rounded-xl px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className={clsx(
-            "flex items-center gap-2 px-3 py-1.5 rounded-lg",
-            currentDrawdown <= -0.2
-              ? "bg-red-500/10 border border-red-500/30"
-              : currentDrawdown <= -0.1
-              ? "bg-yellow-500/10 border border-yellow-500/30"
-              : "bg-blue-500/10 border border-blue-500/30"
-          )}>
-            <TrendingDown size={14} className={
-              currentDrawdown <= -0.2
-                ? "text-red-400"
-                : currentDrawdown <= -0.1
-                ? "text-yellow-400"
-                : "text-blue-400"
-            } />
-            <span className="text-xs text-text-muted">当前回撤</span>
-            <span className={clsx(
-              "font-mono font-bold text-sm",
-              currentDrawdown <= -0.2
-                ? "text-red-400"
-                : currentDrawdown <= -0.1
-                ? "text-yellow-400"
-                : "text-blue-400"
-            )}>
-              {currentDrawdown === 0 ? "--" : `${(currentDrawdown * 100).toFixed(2)}%`}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowDrawdownDashboard(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary/10 border border-accent-primary/30 text-accent-primary hover:bg-accent-primary/20 transition-colors text-sm font-medium"
-        >
-          <Shield size={14} />
-          风控面板
-        </button>
-      </div>
-
-      {/* Drawdown Dashboard Modal */}
-      {showDrawdownDashboard && (
-        <DrawdownDashboard onClose={() => setShowDrawdownDashboard(false)} />
-      )}
-
-      {/* Alert Panel Modal */}
-      {showAlertPanel && (
-        <div className="fixed inset-0 z-50 flex items-start justify-end p-4">
-          <div className="w-96 max-w-full">
-            <AlertPanel onClose={() => setShowAlertPanel(false)} />
-          </div>
-        </div>
-      )}
-
-      {/* Account Manager Modal */}
-      {renderAccountManager()}
-
-      {/* Main Panel */}
-      <div className="bg-bg-secondary border border-border-color rounded-2xl overflow-hidden">
-        {/* Tab Bar */}
-        <div className="flex border-b border-border-color">
-          {([
-            { key: "positions" as const, label: "持仓", icon: <Briefcase size={14} /> },
-            { key: "trade" as const, label: "交易", icon: <ArrowUpDown size={14} /> },
-            { key: "history" as const, label: "历史", icon: <History size={14} /> },
-            { key: "memory" as const, label: "记忆", icon: <Brain size={14} /> },
-            { key: "analytics" as const, label: "分析", icon: <BarChart3 size={14} /> },
-            { key: "paper" as const, label: "模拟", icon: <BarChart3 size={14} /> },
-            { key: "automation" as const, label: "自动化", icon: <Zap size={14} /> },
-            { key: "prompt" as const, label: "Prompt策略", icon: <Settings2 size={14} /> },
-            { key: "status" as const, label: "状态", icon: <Activity size={14} /> },
-            { key: "portfolio" as const, label: "组合", icon: <BarChart3 size={14} /> },
-          ]).map(tabItem => (
+      {/* Sub Tab Navigation - Horizontal scrollable */}
+      <div className="bg-bg-secondary rounded-xl border border-border-color overflow-hidden">
+        <div className="flex overflow-x-auto scrollbar-hide border-b border-border-color">
+          {tradingTabs.map(tabItem => (
             <button
               key={tabItem.key}
-              onClick={() => setTab(tabItem.key)}
+              onClick={() => setTradingTab(tabItem.key)}
               className={clsx(
-                "flex items-center gap-2 px-6 py-3.5 text-sm font-medium border-b-2 transition-all",
-                tab === tabItem.key
-                  ? "border-accent-primary text-accent-primary bg-accent-primary/5"
-                  : "border-transparent text-text-muted hover:text-text-secondary hover:bg-bg-tertiary/30"
+                'px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap',
+                tradingTab === tabItem.key
+                  ? 'text-accent-primary bg-accent-primary/5'
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary/50'
               )}
             >
-              {tabItem.icon}
               {tabItem.label}
+              {tradingTab === tabItem.key && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary" />
+              )}
             </button>
           ))}
         </div>
-
-        {/* Tab Content */}
-        <div>
-          {tab === "positions" && renderPositions()}
-          {tab === "trade" && renderTradeForm()}
-          {tab === "history" && renderHistory()}
-          {tab === "memory" && <MemoryReviewPage />}
-          {tab === "analytics" && <PositionAnalyticsPanel />}
-          {tab === "paper" && <PaperTradePanel />}
-          {tab === "automation" && <SchedulerPanel />}
-          {tab === "prompt" && <PromptStrategyPanel />}
-          {tab === "status" && <StateTransitionPanelWrapper />}
-          {tab === "portfolio" && <PortfolioManagerPanel />}
-        </div>
       </div>
+
+      {/* Sub Page Content */}
+      <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="text-text-muted">加载中...</div></div>}>
+        {renderTradingContent()}
+      </Suspense>
     </div>
   );
 }

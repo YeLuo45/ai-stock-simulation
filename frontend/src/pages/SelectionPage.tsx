@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useStore } from '../store'
 import { aiStockSelection, stockScreener } from '../services/api'
 import { Bot, Search, TrendingUp, TrendingDown, Loader2, Star, Save, FolderOpen, Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
-import type { StockInfo, SavedStrategy, FinancialCriteria, TechnicalCriteria, SentimentCriteria } from '../types'
+import type { StockInfo, SavedStrategy, FinancialCriteria, TechnicalCriteria, SentimentCriteria, SelectionTab } from '../types'
 
 const STRATEGIES_KEY = 'ai-stock-selection-strategies'
 
@@ -19,6 +19,15 @@ function saveStrategies(strategies: SavedStrategy[]) {
   localStorage.setItem(STRATEGIES_KEY, JSON.stringify(strategies))
 }
 
+// Lazy load sub-pages for selection tab
+const BacktestPage = lazy(() => import('./BacktestPage'))
+const BacktestComparePage = lazy(() => import('./BacktestComparePage'))
+const OptimizePage = lazy(() => import('./OptimizePage'))
+const PortfolioOptimizerPage = lazy(() => import('./PortfolioOptimizerPage'))
+const EvolutionPage = lazy(() => import('./EvolutionPage'))
+const FactorEditorPage = lazy(() => import('./FactorEditorPage'))
+const StrategyBuilderPage = lazy(() => import('./StrategyBuilderPage'))
+
 export default function SelectionPage() {
   const { selectedStocks, setSelectedStocks, aiReasoning, setAiReasoning, showNotification } = useStore()
   const [activeTab, setActiveTab] = useState<Tab>('financial')
@@ -26,6 +35,9 @@ export default function SelectionPage() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [filtersApplied, setFiltersApplied] = useState<string[]>([])
+
+  // Selection sub-tab navigation
+  const [selectionTab, setSelectionTab] = useState<SelectionTab>('selection')
 
   // Strategy state per tab
   const [financial, setFinancial] = useState<FinancialCriteria>({})
@@ -129,6 +141,17 @@ export default function SelectionPage() {
     { key: 'sentiment', label: '消息面' },
   ]
 
+  // Selection sub-tabs
+  const selectionTabs: { key: SelectionTab; label: string }[] = [
+    { key: 'selection', label: 'AI选股' },
+    { key: 'backtest', label: '回测' },
+    { key: 'backtest_compare', label: '多策略' },
+    { key: 'optimize', label: '参数优化' },
+    { key: 'portfolio_optimizer', label: '组合优化' },
+    { key: 'factor_editor', label: '因子引擎' },
+    { key: 'strategybuilder', label: 'AI策略' },
+  ]
+
   const exampleQueries = [
     'PE低于20的蓝筹股',
     '近一年涨幅超过50%的科技股',
@@ -152,18 +175,32 @@ export default function SelectionPage() {
     return false
   }
 
-  return (
-    <div className="space-y-6 animate-fade-in-up">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-lg bg-accent-secondary/20 flex items-center justify-center">
-          <Bot size={22} className="text-accent-secondary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">AI智能选股</h1>
-          <p className="text-text-muted text-sm">用自然语言描述您的选股条件，AI帮您筛选</p>
-        </div>
-      </div>
+  // Render sub-page content
+  const renderSubPage = () => {
+    switch (selectionTab) {
+      case 'selection':
+        return renderSelectionContent()
+      case 'backtest':
+        return <BacktestPage />
+      case 'backtest_compare':
+        return <BacktestComparePage />
+      case 'optimize':
+        return <OptimizePage />
+      case 'portfolio_optimizer':
+        return <PortfolioOptimizerPage />
+      case 'evolution':
+        return <EvolutionPage />
+      case 'factor_editor':
+        return <FactorEditorPage />
+      case 'strategybuilder':
+        return <StrategyBuilderPage />
+      default:
+        return renderSelectionContent()
+    }
+  }
 
+  const renderSelectionContent = () => (
+    <>
       {/* Tab Navigation */}
       <div className="bg-bg-secondary rounded-xl border border-border-color overflow-hidden">
         <div className="flex border-b border-border-color">
@@ -504,6 +541,49 @@ export default function SelectionPage() {
           </div>
         </div>
       )}
+    </>
+  )
+
+  return (
+    <div className="space-y-6 animate-fade-in-up">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-lg bg-accent-secondary/20 flex items-center justify-center">
+          <Bot size={22} className="text-accent-secondary" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">智能选股</h1>
+          <p className="text-text-muted text-sm">AI驱动的智能选股与策略优化平台</p>
+        </div>
+      </div>
+
+      {/* Sub Tab Navigation - Horizontal scrollable */}
+      <div className="bg-bg-secondary rounded-xl border border-border-color overflow-hidden">
+        <div className="flex overflow-x-auto scrollbar-hide border-b border-border-color">
+          {selectionTabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setSelectionTab(tab.key)}
+              className={clsx(
+                'px-4 py-3 text-sm font-medium transition-colors relative whitespace-nowrap',
+                selectionTab === tab.key
+                  ? 'text-accent-primary bg-accent-primary/5'
+                  : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary/50'
+              )}
+            >
+              {tab.label}
+              {selectionTab === tab.key && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent-primary" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Sub Page Content */}
+      <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="text-text-muted">加载中...</div></div>}>
+        {renderSubPage()}
+      </Suspense>
     </div>
   )
 }
