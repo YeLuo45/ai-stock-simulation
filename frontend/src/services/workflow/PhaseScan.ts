@@ -2,8 +2,9 @@
  * PhaseScan - Scan Phase Implementation
  * Pulls full market data and filters out ST/suspended/delisted stocks
  */
-import { mockStocks } from '../mockData';
 import type { WorkflowContext, WorkflowCandidate, PhaseResult, ScanConfig, ScanFilters } from './types';
+import { searchSymbols } from '../dataSource';
+import { mockStocks } from '../mockData';
 
 export const PhaseScan = {
   /**
@@ -12,10 +13,22 @@ export const PhaseScan = {
    */
   async run(context: WorkflowContext, config: ScanConfig): Promise<PhaseResult> {
     try {
-      // Get symbols to scan - either from context or full market
-      const symbolsToScan = context.symbols?.length 
-        ? context.symbols 
-        : mockStocks.map(s => s.symbol);
+      // Get symbols to scan - either from context or full market via DataSourceRegistry
+      let symbolsToScan: string[];
+      
+      if (context.symbols?.length) {
+        symbolsToScan = context.symbols;
+      } else {
+        // Use DataSourceRegistry to search for all A stocks
+        try {
+          const symbols = await searchSymbols('A');
+          symbolsToScan = symbols.map(s => s.code);
+        } catch (e) {
+          // Fallback to mock if search fails
+          console.warn('[PhaseScan] searchSymbols failed, using mock:', e);
+          symbolsToScan = mockStocks.map(s => s.symbol);
+        }
+      }
 
       const candidates: WorkflowCandidate[] = [];
       let filteredOut = 0;
