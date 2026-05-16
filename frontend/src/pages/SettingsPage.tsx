@@ -12,6 +12,8 @@ import AutoRunSettings from "../components/AutoRunSettings";
 import LLMConfigPanel from "../components/LLMConfigPanel";
 import WorkflowConfigPanel from "../components/WorkflowConfigPanel";
 import type { AIModelConfig, APIProtocol } from "../types";
+import { MemoryService } from "../services/memory";
+import type { MemoryConfig } from "../services/memory/types";
 
 const MODEL_OPTIONS = [
   {
@@ -78,7 +80,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string; detail?: string } | null>(null);
-  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker" | "workflow">("config");
+  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker" | "workflow" | "memory">("config");
 
   const TABS = [
     { key: "config" as const, label: "模型配置" },
@@ -88,6 +90,7 @@ export default function SettingsPage() {
     { key: "llm" as const, label: "LLM辩论引擎" },
     { key: "autorun" as const, label: "无人值守" },
     { key: "workflow" as const, label: "工作流配置" },
+    { key: "memory" as const, label: "记忆配置" },
   ];
 
   useEffect(() => {
@@ -401,6 +404,200 @@ export default function SettingsPage() {
       {settingsTab === "llm" && (
         <LLMConfigPanel />
       )}
+
+      {settingsTab === "memory" && (
+        <MemoryConfigPanel />
+      )}
+    </div>
+  );
+}
+
+// ============== Memory Config Panel ==============
+
+function MemoryConfigPanel() {
+  const { showNotification } = useStore();
+  const [config, setConfig] = useState<MemoryConfig>(MemoryService.getConfig());
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = () => {
+    setSaving(true);
+    try {
+      MemoryService.updateConfig(config);
+      showNotification("success", "记忆配置已保存");
+    } catch (e) {
+      showNotification("error", "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm("确定重置为默认配置吗？")) {
+      const defaultConfig: MemoryConfig = {
+        maxWakeMemories: 1000,
+        maxDreamMemories: 200,
+        consolidateThreshold: 10,
+        consolidateIntervalMs: 3600000,
+        autoDreamEnabled: true,
+      };
+      setConfig(defaultConfig);
+      MemoryService.updateConfig(defaultConfig);
+      showNotification("info", "已重置为默认配置");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <h3 className="font-bold text-slate-800 mb-1">Dream 两阶段记忆配置</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          配置清醒阶段（Wake）和睡眠阶段（Dream）的记忆管理策略
+        </p>
+
+        <div className="space-y-4">
+          {/* Auto Dream Toggle */}
+          <div className="flex items-center justify-between py-3 border-b border-gray-100">
+            <div>
+              <p className="font-medium text-slate-700">自动整理记忆</p>
+              <p className="text-xs text-slate-500">启用后自动按时间间隔整理压缩记忆</p>
+            </div>
+            <button
+              onClick={() => setConfig(c => ({ ...c, autoDreamEnabled: !c.autoDreamEnabled }))}
+              className={`w-12 h-6 rounded-full transition-colors ${
+                config.autoDreamEnabled ? "bg-accent-primary" : "bg-gray-300"
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                config.autoDreamEnabled ? "translate-x-6" : "translate-x-0.5"
+              }`} />
+            </button>
+          </div>
+
+          {/* Max Wake Memories */}
+          <div className="py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-slate-700">清醒记忆上限</p>
+              <span className="text-sm font-mono text-accent-primary">{config.maxWakeMemories} 条</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-2">超出后 FIFO 淘汰最旧记录</p>
+            <input
+              type="range"
+              min="100"
+              max="5000"
+              step="100"
+              value={config.maxWakeMemories}
+              onChange={(e) => setConfig(c => ({ ...c, maxWakeMemories: Number(e.target.value) }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+            />
+            <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <span>100</span>
+              <span>5000</span>
+            </div>
+          </div>
+
+          {/* Max Dream Memories */}
+          <div className="py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-slate-700">压缩记忆上限</p>
+              <span className="text-sm font-mono text-accent-secondary">{config.maxDreamMemories} 条</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-2">超出后按重要性淘汰</p>
+            <input
+              type="range"
+              min="50"
+              max="1000"
+              step="50"
+              value={config.maxDreamMemories}
+              onChange={(e) => setConfig(c => ({ ...c, maxDreamMemories: Number(e.target.value) }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-accent-secondary"
+            />
+            <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <span>50</span>
+              <span>1000</span>
+            </div>
+          </div>
+
+          {/* Consolidate Threshold */}
+          <div className="py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-slate-700">合并阈值</p>
+              <span className="text-sm font-mono text-accent-primary">{config.consolidateThreshold} 条</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-2">同标签超过此数量时触发合并</p>
+            <input
+              type="range"
+              min="3"
+              max="50"
+              step="1"
+              value={config.consolidateThreshold}
+              onChange={(e) => setConfig(c => ({ ...c, consolidateThreshold: Number(e.target.value) }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+            />
+            <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <span>3</span>
+              <span>50</span>
+            </div>
+          </div>
+
+          {/* Consolidate Interval */}
+          <div className="py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-medium text-slate-700">自动整理间隔</p>
+              <span className="text-sm font-mono text-accent-primary">
+                {config.consolidateIntervalMs < 60000
+                  ? `${config.consolidateIntervalMs / 1000}秒`
+                  : `${config.consolidateIntervalMs / 60000}分钟`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mb-2">自动整理记忆的时间间隔</p>
+            <input
+              type="range"
+              min="60000"
+              max="3600000"
+              step="60000"
+              value={config.consolidateIntervalMs}
+              onChange={(e) => setConfig(c => ({ ...c, consolidateIntervalMs: Number(e.target.value) }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-accent-primary"
+            />
+            <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <span>1分钟</span>
+              <span>1小时</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={handleReset}
+            className="flex-1 py-2 border border-gray-300 rounded-lg text-sm text-slate-700 hover:bg-gray-50 transition-colors"
+          >
+            重置默认
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2 bg-accent-primary text-white rounded-lg text-sm font-medium hover:bg-accent-primary/90 transition-colors disabled:opacity-50"
+          >
+            {saving ? "保存中..." : "保存配置"}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <h4 className="font-semibold text-slate-800 mb-3">当前记忆统计</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-3 bg-accent-primary/5 rounded-lg border border-accent-primary/20">
+            <p className="text-2xl font-bold text-accent-primary">{MemoryService.getStats().wakeCount}</p>
+            <p className="text-xs text-slate-500">清醒记忆</p>
+          </div>
+          <div className="p-3 bg-accent-secondary/5 rounded-lg border border-accent-secondary/20">
+            <p className="text-2xl font-bold text-accent-secondary">{MemoryService.getStats().dreamCount}</p>
+            <p className="text-xs text-slate-500">压缩记忆</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -5,11 +5,13 @@
  */
 import { useState, useEffect } from "react";
 import { useStore } from "../store";
-import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download, PieChart, List, MessageSquare } from "lucide-react";
+import { Brain, Trash2, Search, Filter, Clock, TrendingUp, Bot, BarChart2, Star, ChevronDown, RefreshCw, X, Download, PieChart, List, MessageSquare, Moon } from "lucide-react";
 import clsx from "clsx";
 import OutcomeBadge from "../components/OutcomeBadge";
 import { getMemoryEntries } from "../services/storage";
 import ConversationPanel from "../components/ConversationPanel";
+import { MemoryService } from "../services/memory";
+import type { DreamMemory } from "../services/memory/types";
 
 interface MemoryStatsData {
   total: number;
@@ -77,7 +79,7 @@ export default function MemoryReviewPage() {
   const [searchKw, setSearchKw] = useState("");
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [viewTab, setViewTab] = useState<"list" | "stats" | "conversation" | "debate">("list");
+  const [viewTab, setViewTab] = useState<"list" | "stats" | "conversation" | "debate" | "dream">("list");
   const [_stats, setStats] = useState<MemoryStatsData|null>(null);
 
   const loadEntries = () => {
@@ -316,6 +318,17 @@ export default function MemoryReviewPage() {
             >
               <Bot size={12} /> 辩论
             </button>
+            <button
+              onClick={() => setViewTab("dream")}
+              className={clsx(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                viewTab === "dream"
+                  ? "bg-accent-primary/10 text-accent-primary"
+                  : "text-text-muted hover:text-text-secondary"
+              )}
+            >
+              <Moon size={12} /> 压缩记忆
+            </button>
           </div>
         </div>
       </div>
@@ -400,6 +413,8 @@ export default function MemoryReviewPage() {
         <ConversationPanel />
       ) : viewTab === "debate" ? (
         <DebateHistoryView />
+      ) : viewTab === "dream" ? (
+        <DreamMemoryView />
       ) : (
         <>
       {/* Stats bar */}
@@ -579,4 +594,145 @@ export function addMemoryEntry(entry: Omit<MemoryEntry, "id" | "timestamp">): vo
     timestamp: new Date().toISOString(),
   });
   saveMemoryEntries(entries);
+}
+
+// ============== Dream Memory View ==============
+
+function DreamMemoryView() {
+  const { showNotification } = useStore();
+  const [dreamMemories, setDreamMemories] = useState<DreamMemory[]>([]);
+  const [isConsolidating, setIsConsolidating] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const loadDreamMemories = () => {
+    const dreams = MemoryService.getDreamMemories();
+    setDreamMemories(dreams);
+  };
+
+  useEffect(() => {
+    loadDreamMemories();
+  }, []);
+
+  const handleConsolidate = async () => {
+    setIsConsolidating(true);
+    try {
+      await MemoryService.consolidate();
+      loadDreamMemories();
+      showNotification("success", "记忆整理完成");
+    } catch (err) {
+      showNotification("error", "记忆整理失败");
+    } finally {
+      setIsConsolidating(false);
+    }
+  };
+
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-text-primary">压缩记忆 (Dream)</h2>
+          <p className="text-xs text-text-muted">同标签记忆自动合并，去除冗余</p>
+        </div>
+        <button
+          onClick={handleConsolidate}
+          disabled={isConsolidating}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/30 hover:bg-accent-primary/20 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={isConsolidating ? "animate-spin" : ""} />
+          {isConsolidating ? "整理中..." : "整理记忆"}
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="flex items-center gap-4 px-4 py-3 bg-bg-secondary border border-border-color rounded-xl">
+        <div className="flex items-center gap-2">
+          <Moon size={14} className="text-accent-secondary" />
+          <span className="text-xs text-text-muted">共</span>
+          <span className="text-sm font-mono font-bold text-accent-secondary">{dreamMemories.length}</span>
+          <span className="text-xs text-text-muted">条压缩记忆</span>
+        </div>
+      </div>
+
+      {/* Dream Memories List */}
+      {dreamMemories.length > 0 ? (
+        <div className="space-y-3">
+          {dreamMemories.map((dream) => {
+            const isExpanded = expandedId === dream.id;
+            return (
+              <div
+                key={dream.id}
+                className="bg-bg-secondary border border-border-color rounded-xl overflow-hidden hover:border-accent-secondary/30 transition-all group"
+              >
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : dream.id)}
+                  className="w-full flex items-start gap-3 p-4 text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-accent-secondary/10 border border-accent-secondary/20">
+                    <Moon size={14} className="text-accent-secondary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs px-2 py-0.5 rounded bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20">
+                        由 {dream.mergedCount} 条记忆合并
+                      </span>
+                      {dream.tags.slice(0, 3).map(tag => (
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <p className={clsx(
+                      "text-sm text-text-secondary",
+                      isExpanded ? "" : "line-clamp-2"
+                    )}>
+                      {dream.summary}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-text-muted whitespace-nowrap">{formatTime(dream.lastConsolidated)}</span>
+                    <ChevronDown size={14} className={clsx(
+                      "text-text-muted transition-transform",
+                      isExpanded && "rotate-180"
+                    )} />
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="px-4 pb-4 pt-0 border-t border-border-color/50">
+                    <div className="mt-3 space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {dream.tags.map(tag => (
+                          <span key={tag} className="px-2 py-1 bg-bg-tertiary rounded text-xs text-text-muted">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-text-muted font-mono">
+                        <span>来源ID: {dream.sourceIds.slice(0, 3).join(", ")}{dream.sourceIds.length > 3 ? "..." : ""}</span>
+                        <span>合并时间: {formatTime(dream.lastConsolidated)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
+            <Moon size={28} className="text-text-muted" />
+          </div>
+          <p className="text-text-secondary font-medium mb-1">暂无压缩记忆</p>
+          <p className="text-text-muted text-sm">当同标签记忆超过10条时，会自动整理压缩</p>
+        </div>
+      )}
+    </div>
+  );
 }

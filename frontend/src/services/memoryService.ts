@@ -1,10 +1,13 @@
 /**
- * Memory Service - Strategic Memory System
- * Provides memory creation, outcome tracking, and recommendation engine
+ * Memory Service - Strategic Memory System (Legacy Wrapper)
+ * Now internally uses Dream Two-Stage Memory System
+ * Preserves original API for backward compatibility
  */
 import type { Position, Trade, MemoryEntry } from "../types";
 import type { OHLCV } from "./indicators";
 import { getMemoryEntries, addMemoryEntry, updateMemoryEntry } from "./storage";
+import { MemoryService } from "./memory";
+import type { WakeMemory } from "./memory/types";
 
 export type MemoryOutcome = 'pending' | 'profit' | 'loss' | 'stop_loss' | 'take_profit';
 
@@ -211,6 +214,7 @@ export function computeMemoryStats(): MemoryStatsData {
 
 /**
  * Create a memory entry when a trade is executed (buy)
+ * Also adds to Dream two-stage memory system
  */
 export function createTradeMemory(trade: Trade, position: Position, factors: string[]): MemoryEntry {
   const entry: MemoryEntry = {
@@ -225,13 +229,24 @@ export function createTradeMemory(trade: Trade, position: Position, factors: str
     linkedTradeId: String(trade.id),
     linkedPositionId: String(position.id),
     outcome: 'pending',
-    pnlPercent: trade.price, // Store buy price as reference (pnlPercent will be updated on sell)
+    pnlPercent: trade.price,
     holdingDays: 0,
     decisionFactors: factors,
     auto: true,
   };
 
   addMemoryEntry(entry);
+
+  // Also add to Dream two-stage memory
+  MemoryService.addMemory({
+    type: 'trade',
+    content: entry.content,
+    importance: 0.7,
+    tags: ['trade', 'buy', ...factors],
+    symbol: trade.symbol,
+    outcome: 'neutral',
+  });
+
   return entry;
 }
 
