@@ -14,6 +14,8 @@ import WorkflowConfigPanel from "../components/WorkflowConfigPanel";
 import type { AIModelConfig, APIProtocol } from "../types";
 import { MemoryService } from "../services/memory";
 import type { MemoryConfig } from "../services/memory/types";
+import { StrategyPool, DEFAULT_POOL } from "../services/regime/StrategyPool";
+import { useRegimeStore } from "../services/regime/RegimeStore";
 
 const MODEL_OPTIONS = [
   {
@@ -80,7 +82,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string; detail?: string } | null>(null);
-  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker" | "workflow" | "memory">("config");
+  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker" | "workflow" | "memory" | "regime">("config");
 
   const TABS = [
     { key: "config" as const, label: "模型配置" },
@@ -91,6 +93,7 @@ export default function SettingsPage() {
     { key: "autorun" as const, label: "无人值守" },
     { key: "workflow" as const, label: "工作流配置" },
     { key: "memory" as const, label: "记忆配置" },
+    { key: "regime" as const, label: "市场状态" },
   ];
 
   useEffect(() => {
@@ -408,6 +411,229 @@ export default function SettingsPage() {
       {settingsTab === "memory" && (
         <MemoryConfigPanel />
       )}
+
+      {settingsTab === "regime" && (
+        <RegimeConfigPanel />
+      )}
+    </div>
+  );
+}
+
+// ============== Regime Config Panel ==============
+
+function RegimeConfigPanel() {
+  const { showNotification } = useStore();
+  const { currentRegime, regimeHistory } = useRegimeStore();
+  const [pool, setPool] = useState(() => StrategyPool.getPool());
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = () => {
+    setSaving(true);
+    try {
+      // Save each regime config
+      Object.entries(pool).forEach(([regime, config]) => {
+        if (config) {
+          StrategyPool.updateConfig(regime as any, config);
+        }
+      });
+      showNotification("success", "市场状态策略配置已保存");
+    } catch (e) {
+      showNotification("error", "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm("确定重置为默认配置吗？")) {
+      StrategyPool.reset();
+      setPool(StrategyPool.getPool());
+      showNotification("info", "已重置为默认配置");
+    }
+  };
+
+  const updateRegimeConfig = (regime: string, field: string, value: any) => {
+    setPool(prev => ({
+      ...prev,
+      [regime]: {
+        ...(prev[regime] || DEFAULT_POOL[regime as keyof typeof DEFAULT_POOL]!),
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateFactorWeight = (regime: string, factor: string, value: number) => {
+    const config = pool[regime as keyof typeof pool];
+    if (!config) return;
+    setPool(prev => ({
+      ...prev,
+      [regime]: {
+        ...config,
+        factorWeights: {
+          ...config.factorWeights,
+          [factor]: value,
+        },
+      },
+    }));
+  };
+
+  const REGIME_LABELS: Record<string, string> = {
+    BULL: '牛市',
+    BEAR: '熊市',
+    RANGEBOUND: '震荡',
+    UNKNOWN: '未知',
+  };
+
+  const REGIME_COLORS: Record<string, string> = {
+    BULL: 'text-accent-success',
+    BEAR: 'text-accent-danger',
+    RANGEBOUND: 'text-accent-warning',
+    UNKNOWN: 'text-gray-400',
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Current Regime */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <h3 className="font-bold text-slate-800 mb-1">当前市场状态</h3>
+        <p className="text-xs text-slate-500 mb-4">根据技术指标自动检测的市场状态，用于自适应策略切换</p>
+        
+        <div className="flex items-center gap-4 p-4 bg-bg-tertiary rounded-lg">
+          <div className={`text-2xl font-bold ${REGIME_COLORS[currentRegime]}`}>
+            {REGIME_LABELS[currentRegime] || '未知'}
+          </div>
+          {regimeHistory.length > 0 && (
+            <div className="text-xs text-slate-500">
+              最近变化: {new Date(regimeHistory[regimeHistory.length - 1].timestamp).toLocaleString()}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Regime Strategy Configs */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-bold text-slate-800 mb-1">策略池配置</h3>
+            <p className="text-xs text-slate-500">为不同市场状态配置独立的策略参数</p>
+          </div>
+          <button
+            onClick={handleReset}
+            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+          >
+            重置默认
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {['BULL', 'BEAR', 'RANGEBOUND'].map(regime => (
+            <div key={regime} className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <span className={`font-bold ${REGIME_COLORS[regime]}`}>
+                  {REGIME_LABELS[regime]}
+                </span>
+                <span className="text-xs text-slate-400">市场状态</span>
+              </div>
+
+              {/* Factor Weights */}
+              <div className="mb-4">
+                <div className="text-xs font-medium text-slate-700 mb-2">因子权重</div>
+                <div className="grid grid-cols-2 gap-3">
+                  {['momentum', 'value', 'quality', 'dividend', 'lowVol', 'meanReversion'].map(factor => {
+                    const weight = pool[regime as keyof typeof pool]?.factorWeights?.[factor] ?? 0.25;
+                    return (
+                      <div key={factor} className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 w-20">{factor}</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={weight}
+                          onChange={(e) => updateFactorWeight(regime, factor, parseFloat(e.target.value))}
+                          className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        />
+                        <span className="text-xs font-mono text-accent-primary w-10">{(weight * 100).toFixed(0)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Risk Parameters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-xs text-slate-500 mb-1">最大仓位</div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={pool[regime as keyof typeof pool]?.maxPositionPct ?? 15}
+                      onChange={(e) => updateRegimeConfig(regime, 'maxPositionPct', Number(e.target.value))}
+                      className="w-16 px-2 py-1 text-sm bg-bg-tertiary border border-gray-200 rounded"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 mb-1">止损</div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      step="0.5"
+                      value={pool[regime as keyof typeof pool]?.stopLossPct ?? 5}
+                      onChange={(e) => updateRegimeConfig(regime, 'stopLossPct', Number(e.target.value))}
+                      className="w-16 px-2 py-1 text-sm bg-bg-tertiary border border-gray-200 rounded"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 mb-1">止盈</div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="5"
+                      max="50"
+                      step="1"
+                      value={pool[regime as keyof typeof pool]?.takeProfitPct ?? 15}
+                      onChange={(e) => updateRegimeConfig(regime, 'takeProfitPct', Number(e.target.value))}
+                      className="w-16 px-2 py-1 text-sm bg-bg-tertiary border border-gray-200 rounded"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 mb-1">最大回撤</div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="5"
+                      max="30"
+                      step="1"
+                      value={pool[regime as keyof typeof pool]?.maxDrawdownPct ?? 10}
+                      onChange={(e) => updateRegimeConfig(regime, 'maxDrawdownPct', Number(e.target.value))}
+                      className="w-16 px-2 py-1 text-sm bg-bg-tertiary border border-gray-200 rounded"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? '保存中...' : '保存配置'}
+        </button>
+      </div>
     </div>
   );
 }

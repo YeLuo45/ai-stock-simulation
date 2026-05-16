@@ -1,12 +1,15 @@
 import { useStore } from '../store'
-import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff, Bell, BellOff, Trash2, Shield, Loader2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PieChart, RefreshCw, Eye, EyeOff, Bell, BellOff, Trash2, Shield, Loader2, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
 import { useState, useCallback, Fragment, useEffect, useRef } from 'react'
 import { fetchFundamentalData, getRealtimeQuote } from '../services/yahooFinance'
+import { useRegimeStore } from '../services/regime/RegimeStore'
+import { RegimeDetector } from '../services/regime/RegimeDetector'
 
 export default function HomePage() {
   const { portfolio, trades, isLoading, setPage, priceAlerts, addPriceAlert, removePriceAlert, triggerAlert, showNotification } = useStore()
+  const { currentRegime, confidence, isDetecting, setRegime, setDetecting } = useRegimeStore()
 
   const [expandedPosition, setExpandedPosition] = useState<string | null>(null);
   const [fundamentalCache, setFundamentalCache] = useState<Record<string, any>>({});
@@ -35,6 +38,20 @@ export default function HomePage() {
     dailyVaR: 0,
     loading: false,
   });
+
+  // Regime detection handler
+  const handleRegimeDetect = useCallback(async () => {
+    setDetecting(true);
+    try {
+      const result = await RegimeDetector.detect('000001');
+      setRegime(result);
+      showNotification('info', `市场状态检测完成：${result.regime}（置信度 ${(result.confidence * 100).toFixed(0)}%）`);
+    } catch (e) {
+      showNotification('error', '市场状态检测失败');
+    } finally {
+      setDetecting(false);
+    }
+  }, [setDetecting, setRegime, showNotification]);
 
   const handleToggleExpand = useCallback(async (stockCode: string) => {
     if (expandedPosition === stockCode) {
@@ -198,6 +215,57 @@ export default function HomePage() {
           value={`¥${(portfolio?.cash ?? 1000000).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`}
           icon={<Wallet size={20} className="text-accent-warning" />}
         />
+      </div>
+
+      {/* Regime Status Display */}
+      <div className="bg-bg-secondary rounded-xl p-4 border border-border-color">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'w-10 h-10 rounded-lg flex items-center justify-center',
+              currentRegime === 'BULL' ? 'bg-accent-success/20 text-accent-success' :
+              currentRegime === 'BEAR' ? 'bg-accent-danger/20 text-accent-danger' :
+              currentRegime === 'RANGEBOUND' ? 'bg-accent-warning/20 text-accent-warning' :
+              'bg-gray-500/20 text-gray-400'
+            )}>
+              <Activity size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-text-primary">市场状态</span>
+                <span className={clsx(
+                  'px-2 py-0.5 rounded text-xs font-bold',
+                  currentRegime === 'BULL' ? 'bg-accent-success/20 text-accent-success' :
+                  currentRegime === 'BEAR' ? 'bg-accent-danger/20 text-accent-danger' :
+                  currentRegime === 'RANGEBOUND' ? 'bg-accent-warning/20 text-accent-warning' :
+                  'bg-gray-500/20 text-gray-400'
+                )}>
+                  {currentRegime === 'BULL' ? '牛市' : 
+                   currentRegime === 'BEAR' ? '熊市' : 
+                   currentRegime === 'RANGEBOUND' ? '震荡' : '未知'}
+                </span>
+              </div>
+              <div className="text-xs text-text-muted mt-0.5">
+                置信度: {(confidence * 100).toFixed(0)}%
+                {currentRegime !== 'UNKNOWN' && (
+                  <span className="ml-2">• 策略池已切换</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleRegimeDetect}
+            disabled={isDetecting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-tertiary hover:bg-bg-tertiary/80 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {isDetecting ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )}
+            重新检测
+          </button>
+        </div>
       </div>
 
       {positions.length > 0 && (

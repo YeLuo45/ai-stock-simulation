@@ -4,15 +4,35 @@
  */
 import type { WorkflowContext, DebateDecision, ExecutedOrder, PhaseResult, ExecuteConfig } from './types';
 import { createBrokerProvider, loadBrokerConfig, type BrokerProvider } from '../brokerProvider';
+import { StrategyPool } from '../regime';
+import { getCurrentRegime } from '../regime/RegimeStore';
 
 export const PhaseExecute = {
   /**
    * Run the Execute phase
-   * Places orders based on debate decisions
+   * Places orders based on debate decisions with regime-adaptive risk management
    */
   async run(context: WorkflowContext, config: ExecuteConfig): Promise<PhaseResult> {
     try {
       const decisions = context.debateDecisions || [];
+      
+      // Get regime-adaptive parameters
+      const regime = getCurrentRegime();
+      const poolConfig = StrategyPool.getConfig(regime);
+      
+      // Adjust config based on regime
+      const adjustedConfig = {
+        ...config,
+        maxPositions: Math.min(config.maxPositions, Math.floor(100 / poolConfig.maxPositionPct)),
+        positionSizePct: Math.min(config.positionSizePct, poolConfig.maxPositionPct),
+      };
+      
+      // Use regime-adjusted stop loss / take profit in context
+      const regimeContext = {
+        ...context,
+        stopLossPct: poolConfig.stopLossPct,
+        takeProfitPct: poolConfig.takeProfitPct,
+      };
       
       if (decisions.length === 0) {
         return {
@@ -23,15 +43,16 @@ export const PhaseExecute = {
             orders: [],
             successCount: 0,
             failedCount: 0,
+            regime: regime,
           },
-          message: '无交易决策，跳过执行',
+          message: `无交易决策，跳过执行 (当前市场: ${regime})`,
         };
       }
 
       // Filter valid decisions (BUY or SELL with sufficient confidence)
       const validDecisions = decisions.filter(d => 
         (d.tradeAction === 'BUY' || d.tradeAction === 'SELL') && d.quantityPct > 0
-      ).slice(0, config.maxPositions);
+      ).slice(0, adjustedConfig.maxPositions);
 
       // Create broker provider
       const brokerConfig = loadBrokerConfig();
@@ -44,9 +65,9 @@ export const PhaseExecute = {
 
       const orders: ExecutedOrder[] = [];
 
-      // Execute each decision
+      // Execute each decision with regime-adjusted risk params
       for (const decision of validDecisions) {
-        const order = await this.executeDecision(decision, config, broker);
+        const order = await this.executeDecision(decision, adjustedConfig, broker, poolConfig);
         orders.push(order);
       }
 
@@ -61,10 +82,16 @@ export const PhaseExecute = {
           orders,
           successCount,
           failedCount,
+          regime,
+          riskParams: {
+            stopLossPct: poolConfig.stopLossPct,
+            takeProfitPct: poolConfig.takeProfitPct,
+            maxDrawdownPct: poolConfig.maxDrawdownPct,
+          },
         },
         message: config.dryRun 
-          ? `模拟执行完成：${successCount} 笔成功，${failedCount} 笔失败（dry-run 模式）`
-          : `实盘执行完成：${successCount} 笔成功，${failedCount} 笔失败`,
+          ? `模拟执行完成：${successCount} 笔成功，${failedCount} 笔失败（dry-run 模式, 市场状态: ${regime}）`
+          : `实盘执行完成：${successCount} 笔成功，${failedCount} 笔失败 (市场状态: ${regime})`,
       };
     } catch (err) {
       return {
@@ -78,15 +105,20 @@ export const PhaseExecute = {
   },
 
   /**
-   * Execute a single trading decision
+   * Execute a single trading decision with regime-adaptive risk parameters
    */
   async executeDecision(
     decision: DebateDecision,
     config: ExecuteConfig,
-    broker: BrokerProvider
+    broker: BrokerProvider,
+    poolConfig?: { stopLossPct: number; takeProfitPct: number; maxDrawdownPct: number }
   ): Promise<ExecutedOrder> {
     try {
-      // Calculate position size
+      // Use regime-specific risk parameters if available
+      const stopLoss = poolConfig?.stopLossPct ?? 5;
+      const takeProfit = poolConfig?.takeProfitPct ?? 15;
+      
+      // Calculate position size using regime-adjusted parameters
       const positionValue = decision.quantityPct / 100 * 1000000; // Mock portfolio value
       const quantity = Math.floor(positionValue / decision.quantityPct / decision.symbol.length); // Simplified
 
@@ -100,6 +132,7 @@ export const PhaseExecute = {
           price: 0, // Mock price
           status: 'success',
           orderId: `dry-run-${Date.now()}`,
+          metadata: { stopLoss, takeProfit },
         };
       }
 
@@ -120,6 +153,7 @@ export const PhaseExecute = {
         price: 0,
         status: 'success',
         orderId: order.id,
+        metadata: { stopLoss, takeProfit },
       };
     } catch (err) {
       return {

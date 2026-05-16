@@ -3,9 +3,11 @@
  * Multi-factor scoring using factorComposer approach
  */
 import type { WorkflowContext, WorkflowCandidate, PhaseResult, AnalyzeConfig } from './types';
+import { StrategyPool } from '../regime';
+import { getCurrentRegime } from '../regime/RegimeStore';
 
-// Factor weights for multi-factor model
-const FACTOR_WEIGHTS: Record<string, number> = {
+// Factor weights for multi-factor model (fallback defaults)
+const DEFAULT_FACTOR_WEIGHTS: Record<string, number> = {
   pe: 0.2,
   pb: 0.15,
   roe: 0.25,
@@ -76,15 +78,21 @@ export const PhaseAnalyze = {
   },
 
   /**
-   * Score candidates using multi-factor model
+   * Score candidates using multi-factor model with regime-adaptive weights
    */
   scoreCandidates(candidates: WorkflowCandidate[], factors: string[]): WorkflowCandidate[] {
+    // Get regime-adaptive factor weights
+    const regime = getCurrentRegime();
+    const poolConfig = StrategyPool.getConfig(regime);
+    const regimeWeights = poolConfig.factorWeights;
+    
     return candidates.map(candidate => {
       let totalScore = 0;
       let weightSum = 0;
 
       for (const factor of factors) {
-        const weight = FACTOR_WEIGHTS[factor] || 0.1;
+        // Use regime-specific weight if available, otherwise use default
+        const weight = regimeWeights[factor] ?? DEFAULT_FACTOR_WEIGHTS[factor] ?? 0.1;
         const factorValue = this.getFactorValue(candidate, factor);
         const normalizedValue = this.normalizeFactor(factor, factorValue, candidates);
         
