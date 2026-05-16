@@ -41,6 +41,18 @@ export interface PipelineState {
   parallelBacktestResults?: BacktestResultPayload[];
   parallelRiskResults?: RiskResultPayload[];
   selectedForExecution?: SelectedSignal;
+  // Debate fields
+  debateResults?: DebateResultPayload[];
+}
+
+export interface DebateResultPayload {
+  symbol: string;
+  decision: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  bullScore: number;
+  bearScore: number;
+  tradeQuantityPct: number;
+  reasoning: string;
 }
 
 export interface SelectedSignal {

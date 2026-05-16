@@ -12,6 +12,7 @@ import type {
   BacktestResultPayload,
   RiskResultPayload,
   ExecutionResultPayload,
+  DebateResultPayload,
 } from './messages';
 import { createAgentMessage, createTraceId } from './messages';
 import { updateAgentRun, addPipelineLog, savePipelineState } from './agentStorage';
@@ -24,6 +25,7 @@ import { DataResearcherAgent } from './DataResearcherAgent';
 import { saveAgentMemory, addToOutcomeQueue } from './AgentMemory';
 import { AgentConversationStore } from './AgentConversationStore';
 import { getPaperTradeEngine } from './PaperTradeEngine';
+import { DebateEngine } from './DebateEngine';
 import { NotificationService } from '../services/NotificationService';
 import { messageBus } from './MessageBus';
 import { Phase } from '../types/AgentState';
@@ -285,13 +287,119 @@ export const Supervisor = {
       logPipelineEntry(traceId, 'risk', 'risk_check_parallel', riskDuration, `Error: ${errorMsg}`);
     }
 
-    // Step 3.5: 综合评分选最优
+    // Step 3.5: DEBATE + JUDGMENT phases
     // Filter candidates that passed both backtest and risk
     const validCandidates = topCandidates.filter(c => {
       const bt = backtestMap.get(c.symbol);
       const risk = riskMap.get(c.symbol);
       return bt?.passed && risk?.approved;
     });
+
+    if (validCandidates.length > 0) {
+      // Transition to DEBATE phase
+      messageBus.transitionPhase(traceId, Phase.DEBATE);
+
+      // Get portfolio state for debate
+      const engine = getPaperTradeEngine();
+      const snap = engine.getSnapshot(traceId);
+      const portfolioPositions = snap.positions.map(p => ({
+        symbol: p.symbol,
+        name: p.name,
+        quantity: p.shares,
+        avg_cost: p.avgCost,
+        current_price: p.currentPrice,
+        market_value: p.marketValue,
+        profit_loss: p.unrealizedPnL,
+        profit_loss_pct: p.unrealizedPnLPct,
+      })) as unknown as Position[];
+      const portfolioCash = snap.balance;
+
+      // Run debate for each valid candidate
+      const debateResults: DebateResultPayload[] = [];
+      let debateDuration = 0;
+
+      try {
+        const debateStart = Date.now();
+        const debatePromises = validCandidates.map(candidate =>
+          DebateEngine.runDebate({
+            stockCode: candidate.symbol,
+            analysisSummary: `综合评分: ${candidate.composite_score.toFixed(3)}, 回测: ${backtestMap.get(candidate.symbol)?.passed}, 风控: ${riskMap.get(candidate.symbol)?.approved}`,
+            positions: portfolioPositions,
+            portfolioCash,
+            traceId,
+          }).then(result => {
+            // Update agent runs for debate participants
+            updateAgentRun('bull', 'success', result.debateRound.timestamp - debateStart);
+            updateAgentRun('bear', 'success', result.debateRound.timestamp - debateStart);
+            updateAgentRun('judge', 'success', result.debateRound.timestamp - debateStart);
+
+            return {
+              symbol: candidate.symbol,
+              decision: result.tradeAction === 'SKIP' ? 'HOLD' : result.tradeAction,
+              confidence: result.confidence,
+              bullScore: result.debateRound.judgeVerdict.bullScore,
+              bearScore: result.debateRound.judgeVerdict.bearScore,
+              tradeQuantityPct: result.tradeQuantityPct,
+              reasoning: result.debateRound.judgeVerdict.reasoning,
+            } satisfies DebateResultPayload;
+          })
+        );
+
+        const settled = await Promise.allSettled(debatePromises);
+        debateDuration = Date.now() - debateStart;
+
+        for (const result of settled) {
+          if (result.status === 'fulfilled') {
+            debateResults.push(result.value);
+          }
+        }
+
+        state.debateResults = debateResults;
+        logPipelineEntry(traceId, 'supervisor', 'debate_parallel', debateDuration, `辩论了 ${validCandidates.length} 个候选, ${debateResults.length} 个产生结果`);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        state.errors.push({ agent: 'debate', message: errorMsg, timestamp: Date.now() });
+        logPipelineEntry(traceId, 'supervisor', 'debate_parallel', debateDuration, `Error: ${errorMsg}`);
+      }
+
+      // Transition to JUDGMENT phase
+      messageBus.transitionPhase(traceId, Phase.JUDGMENT);
+
+      // Filter candidates by debate confidence threshold (>= 0.4)
+      const debateApprovedCandidates = validCandidates.filter(c => {
+        const dr = debateResults.find(r => r.symbol === c.symbol);
+        return dr && dr.confidence >= 0.4;
+      });
+
+      // Sort by composite score (already sorted), but prioritize those with higher confidence
+      debateApprovedCandidates.sort((a, b) => {
+        const drA = debateResults.find(r => r.symbol === a.symbol);
+        const drB = debateResults.find(r => r.symbol === b.symbol);
+        const confA = drA?.confidence || 0;
+        const confB = drB?.confidence || 0;
+        if (Math.abs(confA - confB) > 0.1) {
+          return confB - confA;
+        }
+        return b.composite_score - a.composite_score;
+      });
+
+      // Use debate-approved candidates for final selection
+      if (debateApprovedCandidates.length > 0) {
+        // Replace validCandidates with debate-approved ones
+        validCandidates.length = 0;
+        validCandidates.push(...debateApprovedCandidates);
+      } else if (debateResults.length > 0) {
+        // No candidates met confidence threshold
+        state.endTime = Date.now();
+        savePipelineState(state);
+        clearAgentSession(traceId);
+        messageBus.transitionPhase(traceId, Phase.COMPLETED);
+        logPipelineEntry(traceId, 'supervisor', 'cycle_complete', Date.now() - cycleStartTime, '所有候选置信度不足，跳过执行');
+        return { state, logs: [] };
+      }
+    }
+
+    // Step 3.6: 综合评分选最优
 
     if (validCandidates.length === 0) {
       // No valid candidates, pipeline terminates

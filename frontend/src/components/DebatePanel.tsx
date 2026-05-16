@@ -1,18 +1,20 @@
 /**
- * DebatePanel
- * 辩论面板：展示多方论点、空方论点和裁判评分
+ * DebatePanel - 辩论面板
+ * Displays bull arguments, bear arguments, and judge decision
  */
 
 import { useMemo } from 'react';
-import type { DebateRound, Argument } from '../agents/messages';
-import { AGENT_COLORS, AGENT_DISPLAY_NAMES } from '../agents/messages';
+import type { DebateResult, DebateArgument } from '../services/debate/types';
+import { DECISION_LABELS, TRADE_ACTION_LABELS } from '../services/debate/types';
+import { useStore } from '../store';
 
 interface DebatePanelProps {
-  debate: DebateRound | null;
+  debate: DebateResult | null;
   isLoading?: boolean;
+  onRefresh?: () => void;
 }
 
-function ArgumentCard({ arg, side }: { arg: Argument; side: 'bull' | 'bear' }) {
+function ArgumentCard({ arg, side }: { arg: DebateArgument; side: 'bull' | 'bear' }) {
   const isBull = side === 'bull';
   const borderColor = isBull ? 'border-l-green-500' : 'border-l-red-500';
   const bgColor = isBull ? 'bg-green-50' : 'bg-red-50';
@@ -72,11 +74,13 @@ function JudgeScoreBar({ bullScore, bearScore }: { bullScore: number; bearScore:
   );
 }
 
-function VerdictBadge({ decision, confidence }: { decision: string; confidence: number }) {
+function VerdictBadge({ decision, confidence }: { decision: DebateResult['decision']; confidence: number }) {
   const configs: Record<string, { bg: string; text: string; label: string }> = {
+    STRONG_BUY: { bg: 'bg-green-100', text: 'text-green-800', label: '✅ 强烈买入' },
     BUY: { bg: 'bg-green-100', text: 'text-green-800', label: '✅ 买入' },
+    HOLD: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏸️ 观望' },
     SELL: { bg: 'bg-red-100', text: 'text-red-800', label: '🚨 卖出' },
-    HOLD: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: '⏸️ 持有' },
+    STRONG_SELL: { bg: 'bg-red-100', text: 'text-red-800', label: '🚨 强烈卖出' },
   };
   const cfg = configs[decision] || configs.HOLD;
 
@@ -88,7 +92,7 @@ function VerdictBadge({ decision, confidence }: { decision: string; confidence: 
   );
 }
 
-export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
+export function DebatePanel({ debate, isLoading, onRefresh }: DebatePanelProps) {
   const formattedTime = useMemo(() => {
     if (!debate?.timestamp) return '';
     const d = new Date(debate.timestamp);
@@ -114,11 +118,17 @@ export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
       <div className="p-8 text-center text-gray-400">
         <p className="text-4xl mb-2">⚖️</p>
         <p>暂无辩论记录</p>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="mt-4 px-4 py-2 bg-accent-primary/10 text-accent-primary rounded-lg text-sm hover:bg-accent-primary/20"
+          >
+            刷新
+          </button>
+        )}
       </div>
     );
   }
-
-  const { judgeVerdict } = debate;
 
   return (
     <div className="p-4">
@@ -127,17 +137,17 @@ export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
         <div>
           <h3 className="text-lg font-bold text-gray-800">
             辩论裁决
-            {debate.stockCode && <span className="ml-2 text-cyan-600">{debate.stockCode}</span>}
+            {debate.symbol && <span className="ml-2 text-cyan-600">{debate.symbol}</span>}
           </h3>
           <p className="text-xs text-gray-400">
-            第 {debate.round} 轮 · {formattedTime}
+            {formattedTime}
           </p>
         </div>
-        <VerdictBadge decision={judgeVerdict.decision} confidence={judgeVerdict.confidence} />
+        <VerdictBadge decision={debate.decision} confidence={debate.confidence} />
       </div>
 
       {/* Judge Score Bar */}
-      <JudgeScoreBar bullScore={judgeVerdict.bullScore} bearScore={judgeVerdict.bearScore} />
+      <JudgeScoreBar bullScore={debate.bullScore} bearScore={debate.bearScore} />
 
       {/* Arguments */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -145,9 +155,9 @@ export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
         <div>
           <h4 className="text-sm font-semibold text-green-600 mb-2 flex items-center gap-1">
             <span>🐂</span> 多方论点
-            <span className="text-xs text-gray-400 font-normal">({debate.bullArguments.length}条)</span>
+            <span className="text-xs text-gray-400 font-normal">({debate.bullArguments?.length || 0}条)</span>
           </h4>
-          {debate.bullArguments.length > 0 ? (
+          {debate.bullArguments && debate.bullArguments.length > 0 ? (
             debate.bullArguments.map((arg, i) => (
               <ArgumentCard key={i} arg={arg} side="bull" />
             ))
@@ -160,9 +170,9 @@ export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
         <div>
           <h4 className="text-sm font-semibold text-red-600 mb-2 flex items-center gap-1">
             <span>🐻</span> 空方论点
-            <span className="text-xs text-gray-400 font-normal">({debate.bearArguments.length}条)</span>
+            <span className="text-xs text-gray-400 font-normal">({debate.bearArguments?.length || 0}条)</span>
           </h4>
-          {debate.bearArguments.length > 0 ? (
+          {debate.bearArguments && debate.bearArguments.length > 0 ? (
             debate.bearArguments.map((arg, i) => (
               <ArgumentCard key={i} arg={arg} side="bear" />
             ))
@@ -173,14 +183,25 @@ export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
       </div>
 
       {/* Reasoning */}
-      {judgeVerdict.reasoning && (
+      {debate.reasoning && (
         <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
           <h4 className="text-xs font-semibold text-cyan-700 mb-1 flex items-center gap-1">
             <span>⚖️</span> 裁判推理
           </h4>
-          <p className="text-sm text-gray-700">{judgeVerdict.reasoning}</p>
+          <p className="text-sm text-gray-700">{debate.reasoning}</p>
         </div>
       )}
+
+      {/* Trade Action */}
+      <div className="mt-4 flex items-center gap-3 p-3 bg-bg-tertiary rounded-lg">
+        <span className="text-xs text-gray-500">执行建议:</span>
+        <span className={`text-sm font-medium ${
+          debate.tradeAction === 'BUY' ? 'text-green-600' :
+          debate.tradeAction === 'SELL' ? 'text-red-600' : 'text-gray-600'
+        }`}>
+          {TRADE_ACTION_LABELS[debate.tradeAction]} {debate.tradeQuantityPct > 0 ? `(${debate.tradeQuantityPct}%)` : ''}
+        </span>
+      </div>
 
       {/* Confidence indicator */}
       <div className="mt-4 flex items-center gap-3">
@@ -188,26 +209,28 @@ export function DebatePanel({ debate, isLoading }: DebatePanelProps) {
         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all duration-500 ${
-              judgeVerdict.confidence >= 0.7
+              debate.confidence >= 0.7
                 ? 'bg-green-500'
-                : judgeVerdict.confidence >= 0.4
+                : debate.confidence >= 0.4
                 ? 'bg-yellow-500'
                 : 'bg-gray-400'
             }`}
-            style={{ width: `${judgeVerdict.confidence * 100}%` }}
+            style={{ width: `${debate.confidence * 100}%` }}
           />
         </div>
         <span className={`text-xs font-medium ${
-          judgeVerdict.confidence >= 0.7
+          debate.confidence >= 0.7
             ? 'text-green-600'
-            : judgeVerdict.confidence >= 0.4
+            : debate.confidence >= 0.4
             ? 'text-yellow-600'
             : 'text-gray-500'
         }`}>
-          {judgeVerdict.confidence >= 0.7 ? '高 → 全量执行' :
-           judgeVerdict.confidence >= 0.4 ? '中 → 50%执行' : '低 → 跳过'}
+          {debate.confidence >= 0.7 ? '高 → 全量执行' :
+           debate.confidence >= 0.4 ? '中 → 50%执行' : '低 → 跳过'}
         </span>
       </div>
     </div>
   );
 }
+
+export default DebatePanel;

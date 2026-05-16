@@ -77,7 +77,7 @@ export default function MemoryReviewPage() {
   const [searchKw, setSearchKw] = useState("");
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [viewTab, setViewTab] = useState<"list" | "stats" | "conversation">("list");
+  const [viewTab, setViewTab] = useState<"list" | "stats" | "conversation" | "debate">("list");
   const [_stats, setStats] = useState<MemoryStatsData|null>(null);
 
   const loadEntries = () => {
@@ -305,6 +305,17 @@ export default function MemoryReviewPage() {
             >
               <MessageSquare size={12} /> 对话
             </button>
+            <button
+              onClick={() => setViewTab("debate")}
+              className={clsx(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                viewTab === "debate"
+                  ? "bg-accent-primary/10 text-accent-primary"
+                  : "text-text-muted hover:text-text-secondary"
+              )}
+            >
+              <Bot size={12} /> 辩论
+            </button>
           </div>
         </div>
       </div>
@@ -387,6 +398,8 @@ export default function MemoryReviewPage() {
       {/* Conversation View */}
       {viewTab === "conversation" ? (
         <ConversationPanel />
+      ) : viewTab === "debate" ? (
+        <DebateHistoryView />
       ) : (
         <>
       {/* Stats bar */}

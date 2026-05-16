@@ -8,6 +8,7 @@ import { setCurrentModel } from "../services/api";
 import ModelPrioritySettings from "../components/ModelPrioritySettings";
 import DataSourceSelector from "../components/DataSourceSelector";
 import BrokerSettings from "../components/BrokerSettings";
+import AutoRunSettings from "../components/AutoRunSettings";
 import type { AIModelConfig, APIProtocol } from "../types";
 
 const MODEL_OPTIONS = [
@@ -82,10 +83,17 @@ export default function SettingsPage() {
     { key: "priority" as const, label: "AI模型优先级" },
     { key: "datasource" as const, label: "数据源管理" },
     { key: "broker" as const, label: "券商账户" },
+    { key: "autorun" as const, label: "无人值守" },
   ];
 
   useEffect(() => {
     loadConfigs();
+    // Check and start auto-run if enabled
+    const { getAutoRunConfig, startAutoRunChecker } = require('../services/debate/AutoRunService');
+    const autoConfig = getAutoRunConfig();
+    if (autoConfig.enabled) {
+      startAutoRunChecker();
+    }
   }, []);
 
   const loadConfigs = async () => {
@@ -377,6 +385,12 @@ export default function SettingsPage() {
             配置实盘交易券商账户（Alpaca / 模拟），支持 Paper Trade 和 Live Trading。
           </p>
           <BrokerSettings />
+        </div>
+      )}
+
+      {settingsTab === "autorun" && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <AutoRunSettings />
         </div>
       )}
     </div>
