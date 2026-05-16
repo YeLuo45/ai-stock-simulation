@@ -157,6 +157,11 @@ interface AppState {
   clearTrainingHistory: () => void;
   setSelectedSymbol: (symbol: string) => void;
   resetRLState: () => void;
+
+  // LLM Debate Config
+  llmConfig: import("../services/storage").LLMConfig;
+  setLLMConfig: (config: import("../services/storage").LLMConfig) => void;
+  updateLLMConfig: (updates: Partial<import("../services/storage").LLMConfig>) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -455,6 +460,37 @@ export const useStore = create<AppState>((set) => ({
       isPaused: false,
     },
     trainingHistory: [],
+  }),
+
+  // LLM Debate Config
+  llmConfig: (() => {
+    try {
+      const stored = localStorage.getItem('ai-stock-llm-config');
+      return stored ? JSON.parse(stored) : {
+        enabled: false,
+        provider: 'minimax' as const,
+        apiKey: '',
+        temperature: 0.7,
+        maxTokens: 2048,
+      };
+    } catch {
+      return {
+        enabled: false,
+        provider: 'minimax' as const,
+        apiKey: '',
+        temperature: 0.7,
+        maxTokens: 2048,
+      };
+    }
+  })(),
+  setLLMConfig: (config) => {
+    localStorage.setItem('ai-stock-llm-config', JSON.stringify(config));
+    set({ llmConfig: config });
+  },
+  updateLLMConfig: (updates) => set((state) => {
+    const newConfig = { ...state.llmConfig, ...updates };
+    localStorage.setItem('ai-stock-llm-config', JSON.stringify(newConfig));
+    return { llmConfig: newConfig };
   }),
 }));
 

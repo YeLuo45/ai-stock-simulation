@@ -9,6 +9,7 @@ import ModelPrioritySettings from "../components/ModelPrioritySettings";
 import DataSourceSelector from "../components/DataSourceSelector";
 import BrokerSettings from "../components/BrokerSettings";
 import AutoRunSettings from "../components/AutoRunSettings";
+import LLMConfigPanel from "../components/LLMConfigPanel";
 import type { AIModelConfig, APIProtocol } from "../types";
 
 const MODEL_OPTIONS = [
@@ -83,6 +84,7 @@ export default function SettingsPage() {
     { key: "priority" as const, label: "AI模型优先级" },
     { key: "datasource" as const, label: "数据源管理" },
     { key: "broker" as const, label: "券商账户" },
+    { key: "llm" as const, label: "LLM辩论引擎" },
     { key: "autorun" as const, label: "无人值守" },
   ];
 
@@ -392,6 +394,10 @@ export default function SettingsPage() {
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <AutoRunSettings />
         </div>
+      )}
+
+      {settingsTab === "llm" && (
+        <LLMConfigPanel />
       )}
     </div>
   );

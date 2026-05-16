@@ -4,6 +4,65 @@
  */
 import type { Portfolio, Trade, BacktestResponse, AIModelConfig, DataSourceResponse, AIModelPriorityResponse, StockInfo, MemoryEntry, MemoryType, FactorPortfolio } from "../types";
 
+// ============== LLM Config Storage ==============
+
+export interface LLMConfig {
+  enabled: boolean;
+  provider: 'minimax' | 'openai' | 'anthropic';
+  apiKey: string;
+  model?: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+export const DEFAULT_LLM_CONFIG: LLMConfig = {
+  enabled: false,
+  provider: 'minimax',
+  apiKey: '',
+  temperature: 0.7,
+  maxTokens: 2048,
+};
+
+export const LLM_CONFIG_KEY = 'ai-stock-llm-config';
+
+function encodeApiKey(key: string): string {
+  return btoa(key.split('').map((c, i) => 
+    String.fromCharCode(c.charCodeAt(0) ^ (i % 256))
+  ).join(''));
+}
+
+function decodeApiKey(encoded: string): string {
+  return atob(encoded).split('').map((c, i) => 
+    String.fromCharCode(c.charCodeAt(0) ^ (i % 256))
+  ).join('');
+}
+
+export function saveLLMConfig(config: LLMConfig): void {
+  const toSave = { ...config };
+  if (config.apiKey) {
+    toSave.apiKey = encodeApiKey(config.apiKey);
+  }
+  localStorage.setItem(LLM_CONFIG_KEY, JSON.stringify(toSave));
+}
+
+export function loadLLMConfig(): LLMConfig {
+  try {
+    const stored = localStorage.getItem(LLM_CONFIG_KEY);
+    if (!stored) return DEFAULT_LLM_CONFIG;
+    const parsed = JSON.parse(stored);
+    if (parsed.apiKey) {
+      parsed.apiKey = decodeApiKey(parsed.apiKey);
+    }
+    return { ...DEFAULT_LLM_CONFIG, ...parsed };
+  } catch {
+    return DEFAULT_LLM_CONFIG;
+  }
+}
+
+export function clearLLMConfig(): void {
+  localStorage.removeItem(LLM_CONFIG_KEY);
+}
+
 // Storage keys
 const KEYS = {
   PORTFOLIO: (accountId: number) => `ai-stock-portfolio-${accountId}`,

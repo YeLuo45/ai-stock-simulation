@@ -72,7 +72,51 @@ export const DEFAULT_DEBATE_CONFIG: DebateConfig = {
   marketScan: 'watchlist',
 };
 
-// Storage key for auto-run config
+// ============== LLM Configuration ==============
+
+export interface LLMConfig {
+  enabled: boolean;
+  provider: 'minimax' | 'openai' | 'anthropic';
+  apiKey: string;
+  model?: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface LLMResponse {
+  content: string;
+  usage?: {
+    tokens: number;
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+  latency?: number;
+  error?: string;
+}
+
+export interface LLMProvider {
+  name: string;
+  chat(messages: ChatMessage[], options?: { temperature?: number; max_tokens?: number; model?: string }): Promise<LLMResponse>;
+  testConnection(apiKey: string): Promise<{ success: boolean; message: string }>;
+}
+
+// Default LLM config
+export const DEFAULT_LLM_CONFIG: LLMConfig = {
+  enabled: false,
+  provider: 'minimax',
+  apiKey: '',
+  temperature: 0.7,
+  maxTokens: 2048,
+};
+
+export const LLM_CONFIG_KEY = 'ai-stock-llm-config';
+
+// ============== Storage keys ==============
 export const AUTO_RUN_CONFIG_KEY = 'ai-stock-auto-run-config';
 
 // Decision display labels (Chinese)
