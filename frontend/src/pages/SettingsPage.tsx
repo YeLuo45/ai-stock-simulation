@@ -10,6 +10,7 @@ import DataSourceSelector from "../components/DataSourceSelector";
 import BrokerSettings from "../components/BrokerSettings";
 import AutoRunSettings from "../components/AutoRunSettings";
 import LLMConfigPanel from "../components/LLMConfigPanel";
+import WorkflowConfigPanel from "../components/WorkflowConfigPanel";
 import type { AIModelConfig, APIProtocol } from "../types";
 
 const MODEL_OPTIONS = [
@@ -77,7 +78,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string; detail?: string } | null>(null);
-  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker">("config");
+  const [settingsTab, setSettingsTab] = useState<"config" | "priority" | "datasource" | "broker" | "workflow">("config");
 
   const TABS = [
     { key: "config" as const, label: "模型配置" },
@@ -86,6 +87,7 @@ export default function SettingsPage() {
     { key: "broker" as const, label: "券商账户" },
     { key: "llm" as const, label: "LLM辩论引擎" },
     { key: "autorun" as const, label: "无人值守" },
+    { key: "workflow" as const, label: "工作流配置" },
   ];
 
   useEffect(() => {
