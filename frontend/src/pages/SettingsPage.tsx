@@ -16,6 +16,7 @@ import { MemoryService } from "../services/memory";
 import type { MemoryConfig } from "../services/memory/types";
 import { StrategyPool, DEFAULT_POOL } from "../services/regime/StrategyPool";
 import { useRegimeStore } from "../services/regime/RegimeStore";
+import { getAutoRunConfig, startAutoRunChecker } from "../services/debate/AutoRunService";
 
 const MODEL_OPTIONS = [
   {
@@ -99,7 +100,6 @@ export default function SettingsPage() {
   useEffect(() => {
     loadConfigs();
     // Check and start auto-run if enabled
-    const { getAutoRunConfig, startAutoRunChecker } = require('../services/debate/AutoRunService');
     const autoConfig = getAutoRunConfig();
     if (autoConfig.enabled) {
       startAutoRunChecker();

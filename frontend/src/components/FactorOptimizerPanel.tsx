@@ -7,6 +7,7 @@ import {
   getOptimizationResults,
   getBestWeights,
   clearBestWeights,
+  saveBestWeights,
   getTotalGridCombinations,
   type OptimizationResult,
   type FactorConfig,
@@ -158,9 +159,7 @@ export default function FactorOptimizerPanel() {
     if (!currentResult) return;
     // Save to best weights storage
     const bestWeights = currentResult.topWeights;
-    // Convert to FactorWeight and store in factorEngine
-    const { saveBestWeights: saveBW } = require('../agents/FactorOptimizer');
-    saveBW(bestWeights);
+    saveBestWeights(bestWeights);
     showNotification('success', '已应用最优权重到当前因子组合');
   };
 

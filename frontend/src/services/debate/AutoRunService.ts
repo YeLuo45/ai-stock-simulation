@@ -7,7 +7,7 @@ import { DebateSupervisor, type DebateSupervisorPayload } from './DebateSupervis
 import { getDebateHistory, appendDebateHistory } from './DebateMemory';
 import type { DebateResult, DebateConfig } from './types';
 import { DEFAULT_DEBATE_CONFIG, AUTO_RUN_CONFIG_KEY } from './types';
-import { load, save } from '../storage';
+import { load, save, DEFAULT_STOCKS } from '../storage';
 import { NotificationService } from '../NotificationService';
 
 let checkInterval: ReturnType<typeof setInterval> | null = null;
@@ -80,7 +80,6 @@ function getSymbolsToProcess(marketScan: 'all' | 'watchlist'): string[] {
   }
 
   // Fallback to default stocks
-  const { DEFAULT_STOCKS } = require('../storage');
   return DEFAULT_STOCKS.map((s: any) => s.symbol);
 }
 

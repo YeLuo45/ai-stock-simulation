@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import type { Regime, RegimeDetectionResult, RegimeHistoryEntry } from './types';
+import { StrategyPool } from './StrategyPool';
 
 // Storage keys
 const REGIME_STATE_KEY = 'regime_current_state';
@@ -136,8 +137,6 @@ export const useRegimeStore = create<RegimeState>((set, get) => {
     
     getCurrentConfig: () => {
       const { currentRegime } = get();
-      // Lazy import to avoid circular dependency
-      const { StrategyPool } = require('./StrategyPool');
       return StrategyPool.getConfig(currentRegime);
     },
   };

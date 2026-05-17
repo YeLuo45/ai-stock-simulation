@@ -30,6 +30,7 @@ import DebatePanel from "../components/DebatePanel";
 import PromptStrategyPanel from "../components/PromptStrategyPanel";
 import StateTransitionPanel from "../components/StateTransitionPanel";
 import { computeDrawdown, trackEquitySnapshot, checkAndTriggerAlerts } from "../services/drawdownEngine";
+import { messageBus } from "../agents/MessageBus";
 
 const PAGE_SIZE = 10;
 
@@ -44,7 +45,6 @@ function StateTransitionPanelWrapper() {
 
     // Subscribe to message bus updates
     const interval = setInterval(() => {
-      const { messageBus } = require('../agents/MessageBus');
       const currentState = messageBus.getState(latestTraceId);
       const currentMessages = messageBus.getMessages(latestTraceId);
       setState(currentState);
