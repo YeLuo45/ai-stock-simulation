@@ -1,0 +1,218 @@
+{
+  "version": "1.0.0",
+  "defaultChain": "standard",
+  "chains": {
+    "standard": {
+      "id": "standard",
+      "name": "标准交易流程",
+      "description": "完整五阶段流程：研究→分析→策略→决策→执行",
+      "phases": [
+        {
+          "id": "research",
+          "name": "市场研究",
+          "agent": "NewsAnalyst",
+          "tools": ["news", "financials", "marketData"],
+          "input": [],
+          "output": "marketNews",
+          "timeout": 30,
+          "retry": 2
+        },
+        {
+          "id": "analysis",
+          "name": "技术分析",
+          "agent": "TechnicalAnalyst",
+          "tools": ["indicators", "chartPatterns", "kline"],
+          "input": ["marketNews"],
+          "output": "technicalSignals",
+          "condition": "regime != 'volatile'",
+          "timeout": 25,
+          "retry": 1
+        },
+        {
+          "id": "strategy",
+          "name": "策略制定",
+          "agent": "StrategyPool",
+          "tools": ["factorEngine", "regimeDetector"],
+          "input": ["technicalSignals", "marketRegime"],
+          "output": "strategy",
+          "timeout": 20,
+          "retry": 1
+        },
+        {
+          "id": "decision",
+          "name": "交易决策",
+          "agent": "TradingAgent",
+          "tools": ["debate", "riskAssessment"],
+          "input": ["strategy", "marketContext"],
+          "output": "tradingDecision",
+          "timeout": 30,
+          "retry": 2
+        },
+        {
+          "id": "execution",
+          "name": "订单执行",
+          "agent": "OrderExecutor",
+          "tools": ["orderBook", "brokerAPI"],
+          "input": ["tradingDecision"],
+          "output": "executionReport",
+          "timeout": 15,
+          "retry": 3
+        }
+      ]
+    },
+    "momentum": {
+      "id": "momentum",
+      "name": "动量快轨流程",
+      "description": "简化流程用于动量市场：快速研究→动量策略→快速决策→执行",
+      "phases": [
+        {
+          "id": "quick_research",
+          "name": "快速研究",
+          "agent": "RegimeDetector",
+          "tools": ["priceData", "volumeData"],
+          "input": [],
+          "output": "marketRegime",
+          "timeout": 10,
+          "retry": 1
+        },
+        {
+          "id": "momentum_strategy",
+          "name": "动量策略",
+          "agent": "StrategyPool",
+          "tools": ["momentumIndicators"],
+          "input": ["marketRegime"],
+          "output": "momentumStrategy",
+          "timeout": 15,
+          "retry": 1
+        },
+        {
+          "id": "quick_decision",
+          "name": "快速决策",
+          "agent": "TradingAgent",
+          "tools": ["quickDebate"],
+          "input": ["momentumStrategy"],
+          "output": "quickDecision",
+          "timeout": 10,
+          "retry": 1
+        },
+        {
+          "id": "fast_execution",
+          "name": "快速执行",
+          "agent": "OrderExecutor",
+          "tools": ["marketOrder"],
+          "input": ["quickDecision"],
+          "output": "executionReport",
+          "timeout": 10,
+          "retry": 2
+        }
+      ]
+    },
+    "defensive": {
+      "id": "defensive",
+      "name": "防御流程",
+      "description": "增加风险评估的标准流程",
+      "phases": [
+        {
+          "id": "research",
+          "name": "市场研究",
+          "agent": "NewsAnalyst",
+          "tools": ["news", "financials", "marketData"],
+          "input": [],
+          "output": "marketNews",
+          "timeout": 30,
+          "retry": 2
+        },
+        {
+          "id": "risk_assessment",
+          "name": "风险评估",
+          "agent": "RiskAnalyst",
+          "tools": ["cvar", "stressTest", "portfolioRisk"],
+          "input": ["marketNews", "positions"],
+          "output": "riskReport",
+          "condition": "marketRegime == 'volatile'",
+          "timeout": 20,
+          "retry": 1
+        },
+        {
+          "id": "analysis",
+          "name": "技术分析",
+          "agent": "TechnicalAnalyst",
+          "tools": ["indicators", "chartPatterns", "kline"],
+          "input": ["marketNews"],
+          "output": "technicalSignals",
+          "timeout": 25,
+          "retry": 1
+        },
+        {
+          "id": "strategy",
+          "name": "策略制定",
+          "agent": "StrategyPool",
+          "tools": ["factorEngine", "regimeDetector"],
+          "input": ["technicalSignals", "marketRegime"],
+          "output": "strategy",
+          "timeout": 20,
+          "retry": 1
+        },
+        {
+          "id": "decision",
+          "name": "交易决策",
+          "agent": "TradingAgent",
+          "tools": ["debate", "riskAssessment"],
+          "input": ["strategy", "marketContext"],
+          "output": "tradingDecision",
+          "timeout": 30,
+          "retry": 2
+        },
+        {
+          "id": "execution",
+          "name": "订单执行",
+          "agent": "OrderExecutor",
+          "tools": ["orderBook", "brokerAPI"],
+          "input": ["tradingDecision"],
+          "output": "executionReport",
+          "timeout": 15,
+          "retry": 3
+        }
+      ]
+    }
+  },
+  "regimeTriggers": {
+    "BULL": "standard",
+    "BEAR": "defensive",
+    "RANGEBOUND": "standard",
+    "UNKNOWN": "momentum",
+    "volatile": "defensive"
+  },
+  "agents": {
+    "NewsAnalyst": {
+      "name": "新闻分析师",
+      "description": "分析市场新闻和情绪，输出市场情绪报告",
+      "model": "gpt-4o-mini"
+    },
+    "TechnicalAnalyst": {
+      "name": "技术分析师",
+      "description": "计算技术指标，分析图表形态",
+      "model": "gpt-4o-mini"
+    },
+    "StrategyPool": {
+      "name": "策略池",
+      "description": "根据市场状态选择和配置策略参数",
+      "model": "gpt-4o-mini"
+    },
+    "TradingAgent": {
+      "name": "交易决策Agent",
+      "description": "多角色辩论(Bull/Bear)，输出交易决策",
+      "model": "gpt-4o"
+    },
+    "OrderExecutor": {
+      "name": "订单执行器",
+      "description": "执行买入/卖出订单",
+      "model": "gpt-4o-mini"
+    },
+    "RiskAnalyst": {
+      "name": "风险分析师",
+      "description": "评估投资组合风险，计算CVaR",
+      "model": "gpt-4o-mini"
+    }
+  }
+}
