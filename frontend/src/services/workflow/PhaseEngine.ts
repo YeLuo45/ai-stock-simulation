@@ -9,6 +9,7 @@ import { PhaseExecute } from './PhaseExecute';
 import { useWorkflowStore, type CurrentPhase } from './WorkflowStore';
 import type { PhaseConfig, PhaseResult, WorkflowContext } from './types';
 import { notificationService } from '../NotificationService';
+import { messageBus, Channel } from '../messageBus';
 
 const PHASE_ORDER: CurrentPhase[] = ['scan', 'analyze', 'debate', 'execute'];
 
@@ -28,6 +29,13 @@ export const PhaseEngine = {
       type: 'info',
       title: '工作流启动',
       message: 'Phase Workflow 已启动，开始执行 Scan → Analyze → Debate → Execute',
+    });
+
+    // Emit workflow:start event for event-driven workflow monitoring
+    messageBus.emit(Channel.WORKFLOW_START, {
+      phases: PHASE_ORDER,
+      context,
+      timestamp: Date.now(),
     });
 
     // Execute each phase in order
@@ -57,6 +65,12 @@ export const PhaseEngine = {
       store.setCurrentPhase(phase);
       const phaseStartTime = Date.now();
 
+      // Emit workflow:phase:start event
+      messageBus.emit(Channel.WORKFLOW_PHASE_START, {
+        phase,
+        timestamp: phaseStartTime,
+      });
+
       try {
         const result = await this.executePhase(phase, config, context, results);
 
@@ -67,6 +81,14 @@ export const PhaseEngine = {
         // Add result
         results.push(result);
         store.addPhaseResult(result);
+
+        // Emit workflow:phase:complete event
+        messageBus.emit(Channel.WORKFLOW_PHASE_COMPLETE, {
+          phase,
+          result,
+          duration: result.duration,
+          timestamp: result.timestamp,
+        });
 
         // Send notification
         notificationService.sendAlert({
@@ -99,6 +121,14 @@ export const PhaseEngine = {
         };
         results.push(errorResult);
         store.addPhaseResult(errorResult);
+        
+        // Emit workflow:error event
+        messageBus.emit(Channel.WORKFLOW_ERROR, {
+          phase,
+          error: errorResult.error,
+          timestamp: Date.now(),
+        });
+        
         break;
       }
     }
@@ -106,6 +136,14 @@ export const PhaseEngine = {
     // Workflow completed or terminated
     store.abortWorkflow();
     store.setLastRunTime(Date.now());
+
+    // Emit workflow:complete event
+    messageBus.emit(Channel.WORKFLOW_COMPLETE, {
+      phases: PHASE_ORDER,
+      results,
+      totalDuration: results.reduce((sum, r) => sum + (r.duration || 0), 0),
+      timestamp: Date.now(),
+    });
 
     notificationService.sendAlert({
       type: 'success',

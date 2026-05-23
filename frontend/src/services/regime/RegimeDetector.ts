@@ -6,6 +6,7 @@ import type { Regime, RegimeDetectionResult, RegimeIndicatorScores, PositionData
 import { getKline } from '../dataSource/DataSourceRegistry';
 import { sma, calculateRSI, calculateMACD } from '../indicators';
 import type { OHLCV } from '../indicators';
+import { messageBus, Channel } from '../messageBus';
 
 // Default index symbols to check
 const DEFAULT_INDEX_SYMBOLS = ['000001', '399300']; // 上证指数, 沪深300
@@ -54,7 +55,7 @@ export const RegimeDetector = {
       // Determine regime
       const { regime, confidence } = determineRegime(regimeScore, scores);
       
-      return {
+      const result: RegimeDetectionResult = {
         regime,
         confidence,
         indicators: {
@@ -64,6 +65,11 @@ export const RegimeDetector = {
         },
         detectedAt: Date.now(),
       };
+      
+      // Emit regime:detected event for event-driven subscribers
+      messageBus.emit(Channel.REGIME_DETECTED, { regime, confidence, result });
+      
+      return result;
     } catch (error) {
       console.error('Regime detection failed:', error);
       return createUnknownResult(error instanceof Error ? error.message : 'Detection failed');
@@ -106,7 +112,7 @@ export const RegimeDetector = {
       // Determine regime
       const { regime, confidence } = determineRegime(regimeScore, scores);
       
-      return {
+      const result: RegimeDetectionResult = {
         regime,
         confidence,
         indicators: {
@@ -116,6 +122,11 @@ export const RegimeDetector = {
         },
         detectedAt: Date.now(),
       };
+      
+      // Emit regime:detected event for event-driven subscribers
+      messageBus.emit(Channel.REGIME_DETECTED, { regime, confidence, result });
+      
+      return result;
     } catch (error) {
       console.error('Portfolio-based regime detection failed:', error);
       return createUnknownResult(error instanceof Error ? error.message : 'Detection failed');

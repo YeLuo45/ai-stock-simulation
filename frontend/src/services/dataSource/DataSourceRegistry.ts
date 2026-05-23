@@ -7,6 +7,7 @@ import { AKShareProvider } from './AKShareProvider';
 import { YahooProvider } from './YahooProvider';
 import { MockProvider } from './MockProvider';
 import { getCached, setCache } from './cache';
+import { messageBus, Channel } from '../messageBus';
 
 // Registry key for storage
 const REGISTRY_CONFIG_KEY = 'data_source_registry_config';
@@ -140,6 +141,16 @@ export async function getKline(symbol: string, period: string): Promise<KLineDat
         lastFetch: Date.now(),
       });
 
+      // Emit data:update event for event-driven data flow
+      messageBus.emit(Channel.DATA_UPDATE, {
+        type: 'kline',
+        symbol,
+        period,
+        data,
+        provider: name,
+        timestamp: Date.now(),
+      });
+
       return data;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -186,6 +197,15 @@ export async function getRealtime(symbol: string): Promise<RealtimeQuote> {
         lastFetch: Date.now(),
       });
 
+      // Emit data:update event for event-driven data flow
+      messageBus.emit(Channel.DATA_UPDATE, {
+        type: 'realtime',
+        symbol,
+        data,
+        provider: name,
+        timestamp: Date.now(),
+      });
+
       return data;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -228,6 +248,16 @@ export async function searchSymbols(keyword: string): Promise<Symbol[]> {
           status: 'connected',
           lastFetch: Date.now(),
         });
+        
+        // Emit data:update event for event-driven data flow
+        messageBus.emit(Channel.DATA_UPDATE, {
+          type: 'search',
+          keyword,
+          data,
+          provider: name,
+          timestamp: Date.now(),
+        });
+        
         return data;
       }
     } catch (err) {

@@ -3,6 +3,7 @@
  * Provides adaptive parameter switching based on market state
  */
 import type { Regime, RegimeConfig, StrategyPoolConfig } from './types';
+import { messageBus, Channel } from '../messageBus';
 
 // Storage key for localStorage persistence
 const STRATEGY_POOL_KEY = 'regime_strategy_pool';
@@ -41,6 +42,31 @@ export const DEFAULT_POOL: StrategyPoolConfig = {
 
 // Current pool state (can be modified at runtime)
 let currentPool: StrategyPoolConfig = loadFromStorage();
+
+// Track current regime for change detection
+let currentRegime: Regime | null = null;
+
+// Subscribe to regime:detected events for event-driven strategy switching
+function setupRegimeSubscription(): void {
+  messageBus.on<{ regime: Regime; confidence: number }>(Channel.REGIME_DETECTED, ({ regime, confidence }) => {
+    if (regime !== currentRegime) {
+      const oldRegime = currentRegime;
+      currentRegime = regime;
+      console.log(`[StrategyPool] Regime changed: ${oldRegime ?? 'none'} -> ${regime} (confidence: ${confidence.toFixed(2)})`);
+      
+      // Emit strategy:update event for downstream subscribers
+      messageBus.emit(Channel.STRATEGY_UPDATE, {
+        previousRegime: oldRegime,
+        currentRegime: regime,
+        config: StrategyPool.getConfig(regime),
+        confidence,
+      });
+    }
+  });
+}
+
+// Initialize subscription
+setupRegimeSubscription();
 
 function loadFromStorage(): StrategyPoolConfig {
   try {
