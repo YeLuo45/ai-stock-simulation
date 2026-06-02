@@ -28,13 +28,17 @@ describe('TechnicalAnalyst', () => {
   });
 
   it('should process with bullish market data', async () => {
+    // For bullish: last 20 avg (high ~135) > last 60 avg (low ~45)
+    // Bar 1-60: up from 20 to 80 (60 bars, avg ≈ 50)
+    // Bar 61-80: up from 85 to 140 (20 bars, avg ≈ 112)
+    // MA20 ≈ 112, MA60 ≈ 60 → MA20 > MA60 (bullish) ✓
+    const bullishData = [
+      ...Array.from({ length: 60 }, (_, i) => ({ close: 20 + i, high: 20 + i + 2, low: 20 + i - 2, volume: 1000000, open: 20 + i })),
+      ...Array.from({ length: 20 }, (_, i) => ({ close: 85 + i * 3, high: 88 + i * 3, low: 82 + i * 3, volume: 1000000, open: 85 + i * 3 })),
+    ];
     const message = createAgentMessage('supervisor', 'technical_analyst', 'request', {
       stockCode: 'AAPL',
-      marketData: [
-        { close: 100, high: 105, low: 95, volume: 1000000, open: 98 },
-        { close: 102, high: 107, low: 96, volume: 1100000, open: 100 },
-        { close: 104, high: 109, low: 97, volume: 1200000, open: 102 },
-      ],
+      marketData: bullishData,
     }, 'trace-1');
     const response = await TechnicalAnalyst.process(message);
     expect(response.type).toBe('response');
@@ -43,13 +47,17 @@ describe('TechnicalAnalyst', () => {
   });
 
   it('should process with bearish market data', async () => {
+    // For bearish: last 20 avg (low ~35) < last 60 avg (high ~110)
+    // Bar 1-60: up from 80 to 140 (60 bars, avg ≈ 110)
+    // Bar 61-80: down from 135 to 50 (20 bars, avg ≈ 92)
+    // MA20 ≈ 92, MA60 ≈ 110 → MA20 < MA60 (bearish) ✓
+    const bearishData = [
+      ...Array.from({ length: 60 }, (_, i) => ({ close: 80 + i, high: 82 + i, low: 78 + i, volume: 1000000, open: 80 + i })),
+      ...Array.from({ length: 20 }, (_, i) => ({ close: 135 - i * 4, high: 137 - i * 4, low: 133 - i * 4, volume: 1000000, open: 135 - i * 4 })),
+    ];
     const message = createAgentMessage('supervisor', 'technical_analyst', 'request', {
       stockCode: 'GOOGL',
-      marketData: [
-        { close: 100, high: 105, low: 95, volume: 1000000, open: 98 },
-        { close: 98, high: 100, low: 93, volume: 1100000, open: 100 },
-        { close: 96, high: 98, low: 90, volume: 1200000, open: 98 },
-      ],
+      marketData: bearishData,
     }, 'trace-1');
     const response = await TechnicalAnalyst.process(message);
     const analysis = (response.payload as any).analysis;
